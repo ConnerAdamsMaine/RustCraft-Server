@@ -2,10 +2,10 @@ use std::sync::LazyLock;
 
 use anyhow::Result;
 use rustcraft::error_tracker::ErrorTracker;
-use rustcraft::core::server::MinecraftServer;
+use rustcraft::Core::server::MinecraftServer;
 
 #[cfg(feature = "dev-sdk")]
-use rustcraft::sdk::PacketLogger;
+use crate::sdk::PacketLogger;
 
 #[cfg(feature = "dev-sdk")]
 pub static LOGGER: LazyLock<PacketLogger> =
