@@ -7,6 +7,8 @@ pub mod player;
 pub mod terrain;
 pub mod world;
 
+pub mod serialization;
+
 // Developer SDK modules (feature-gated)
 #[cfg(feature = "dev-sdk")]
 pub mod sdk;
