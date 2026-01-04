@@ -74,15 +74,15 @@ impl ChunkStorage {
     }
 
     fn pregenerate_spawn_area(&self) -> Result<()> {
-        info!("[STARTUP] Pregenerating spawn area (64x64 chunks)...");
+        info!("[STARTUP] Pregenerating spawn area (16x16 chunks)...");
 
         let start = std::time::Instant::now();
         let mut generated = 0;
         let (tx, rx) = mpsc::channel();
 
-        // Generate a 64x64 area centered around origin using thread pool
-        for cx in -32..32 {
-            for cz in -32..32 {
+        // Generate a 16x16 area centered around origin using thread pool
+        for cx in -8..8 {
+            for cz in -8..8 {
                 let pos = ChunkPos::new(cx, cz);
 
                 // Check if chunk exists on disk

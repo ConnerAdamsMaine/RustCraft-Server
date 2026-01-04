@@ -10,6 +10,7 @@ use crate::chunk_generator::ChunkGenerator;
 use crate::chunk_storage::ChunkStorage;
 use crate::error_tracker::ErrorTracker;
 use crate::thread_pool::{ChunkGenThreadPool, FileIOThreadPool, NetworkThreadPool};
+use crate::packet_logger::PacketLogger;
 
 pub struct MinecraftServer {
     listener: TcpListener,
@@ -19,12 +20,16 @@ pub struct MinecraftServer {
     chunk_gen_pool: Arc<ChunkGenThreadPool>,
     file_io_pool: Arc<FileIOThreadPool>,
     network_pool: Arc<NetworkThreadPool>,
+    packet_logger: PacketLogger,
 }
 
 impl MinecraftServer {
     pub async fn new(addr: &str, error_tracker: Arc<ErrorTracker>) -> Result<Self> {
         let listener = TcpListener::bind(addr).await?;
         info!("[STARTUP] Server listening on {}", addr);
+
+        // Initialize packet logger
+        let packet_logger = PacketLogger::new()?;
 
         // Initialize thread pools first
         let chunk_gen_pool = Arc::new(ChunkGenThreadPool::new());
@@ -43,6 +48,7 @@ impl MinecraftServer {
             chunk_gen_pool,
             file_io_pool,
             network_pool,
+            packet_logger,
         })
     }
 
@@ -53,6 +59,7 @@ impl MinecraftServer {
         let chunk_gen_pool = self.chunk_gen_pool.clone();
         let file_io_pool = self.file_io_pool.clone();
         let network_pool = self.network_pool.clone();
+        let packet_logger = self.packet_logger.clone();
 
         // Start hit count reset task (runs every 5 minutes)
         self.chunk_storage.start_hit_reset_task();
@@ -60,14 +67,14 @@ impl MinecraftServer {
         // Check if world directory exists, if not generate initial chunks
         let world_path = "./world";
         if !Path::new(world_path).exists() {
-            info!("[STARTUP] World directory does not exist, generating initial 64x64 chunks...");
+            info!("[STARTUP] World directory does not exist, generating initial 16x16 chunks...");
             let chunk_gen_pool_clone = chunk_gen_pool.clone();
             let chunk_storage_clone = chunk_storage.clone();
             
             tokio::spawn(async move {
-                // Generate 64x64 chunk grid around origin
-                for x in -32..32 {
-                    for z in -32..32 {
+                // Generate 16x16 chunk grid around origin
+                for x in -8..8 {
+                    for z in -8..8 {
                         let chunk_pos = crate::chunk::ChunkPos::new(x, z);
                         // Queue chunk generation through the chunk storage
                         let _ = chunk_storage_clone.get_chunk(chunk_pos);
@@ -111,6 +118,7 @@ impl MinecraftServer {
                             chunk_gen_pool,
                             file_io_pool,
                             network_pool,
+                            packet_logger,
                         )
                         .await
                         {
@@ -138,10 +146,11 @@ async fn handle_client(
     chunk_gen_pool: Arc<ChunkGenThreadPool>,
     file_io_pool: Arc<FileIOThreadPool>,
     network_pool: Arc<NetworkThreadPool>,
+    packet_logger: PacketLogger,
 ) -> Result<()> {
-    let player = Player::new(socket).await?;
+    let player = Player::new(socket, packet_logger.clone()).await?;
     player
-        .handle(chunk_storage, error_tracker, chunk_gen_pool, file_io_pool, network_pool)
+        .handle(chunk_storage, error_tracker, chunk_gen_pool, file_io_pool, network_pool, packet_logger)
         .await?;
     Ok(())
 }

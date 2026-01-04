@@ -17,6 +17,7 @@ mod thread_pool;
 mod chunk_protocol;
 mod chunk_sender;
 mod movement_handler;
+mod packet_logger;
 
 use anyhow::Result;
 use tracing_subscriber;
