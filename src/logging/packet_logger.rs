@@ -1,14 +1,13 @@
 use std::fs;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
 
 use anyhow::Result;
 use tracing::debug;
 
 pub struct PacketLogger {
     packet_dir: PathBuf,
-    counter:    Arc<AtomicUsize>,
+    counter:    AtomicUsize,
 }
 
 impl PacketLogger {
@@ -34,7 +33,7 @@ impl PacketLogger {
 
         Ok(Self {
             packet_dir,
-            counter: Arc::new(AtomicUsize::new(0)),
+            counter: AtomicUsize::new(0),
         })
     }
 
@@ -61,11 +60,18 @@ impl PacketLogger {
     }
 }
 
+impl AsRef<PacketLogger> for PacketLogger {
+    fn as_ref(&self) -> &PacketLogger {
+        self
+    }
+}
+
 impl Clone for PacketLogger {
     fn clone(&self) -> Self {
+        let counter = AtomicUsize::new(self.counter.load(Ordering::SeqCst));
         Self {
             packet_dir: self.packet_dir.clone(),
-            counter:    Arc::clone(&self.counter),
+            counter,
         }
     }
 }

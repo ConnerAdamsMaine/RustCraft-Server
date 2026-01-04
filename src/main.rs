@@ -7,10 +7,10 @@ mod chunk_storage;
 mod error_tracker;
 mod game_loop;
 mod join_game;
+mod logging;
 mod login;
 mod movement_handler;
 mod noise;
-mod packet_logger;
 mod player;
 mod protocol;
 mod region;
@@ -19,10 +19,14 @@ mod terrain_gen;
 mod thread_pool;
 mod world;
 
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 
 use anyhow::Result;
-use tracing_subscriber;
+
+use crate::logging::PacketLogger;
+
+pub static LOGGER: LazyLock<PacketLogger> =
+    LazyLock::new(|| PacketLogger::new().expect("Failed to initialize PacketLogger"));
 
 #[tokio::main]
 async fn main() -> Result<()> {

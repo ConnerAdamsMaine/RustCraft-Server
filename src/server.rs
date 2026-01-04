@@ -9,7 +9,6 @@ use crate::chunk_generator::ChunkGenerator;
 use crate::chunk_storage::ChunkStorage;
 use crate::error_tracker::ErrorTracker;
 use crate::game_loop::GameLoop;
-use crate::packet_logger::PacketLogger;
 use crate::player::Player;
 use crate::thread_pool::{ChunkGenThreadPool, FileIOThreadPool, NetworkThreadPool};
 
@@ -21,7 +20,7 @@ pub struct MinecraftServer {
     chunk_gen_pool: Arc<ChunkGenThreadPool>,
     file_io_pool:   Arc<FileIOThreadPool>,
     network_pool:   Arc<NetworkThreadPool>,
-    packet_logger:  PacketLogger,
+    // packet_logger:  Pin<Box<PacketLogger>>,
 }
 
 impl MinecraftServer {
@@ -30,7 +29,7 @@ impl MinecraftServer {
         info!("[STARTUP] Server listening on {}", addr);
 
         // Initialize packet logger
-        let packet_logger = PacketLogger::new()?;
+        // let packet_logger = Pin::new(Box::new(PacketLogger::new()?));
 
         // Initialize thread pools first
         let chunk_gen_pool = Arc::new(ChunkGenThreadPool::new());
@@ -49,7 +48,7 @@ impl MinecraftServer {
             chunk_gen_pool,
             file_io_pool,
             network_pool,
-            packet_logger,
+            // packet_logger,
         })
     }
 
@@ -60,7 +59,7 @@ impl MinecraftServer {
         let chunk_gen_pool = self.chunk_gen_pool.clone();
         let file_io_pool = self.file_io_pool.clone();
         let network_pool = self.network_pool.clone();
-        let packet_logger = self.packet_logger.clone();
+        // let packet_logger = self.packet_logger.as_ref();
 
         // Start hit count reset task (runs every 5 minutes)
         self.chunk_storage.start_hit_reset_task();
@@ -103,7 +102,6 @@ impl MinecraftServer {
         });
 
         loop {
-            let packet_logger = packet_logger.clone();
             match self.listener.accept().await {
                 Ok((socket, addr)) => {
                     info!("[CONNECTION] New connection from {}", addr);
@@ -121,7 +119,6 @@ impl MinecraftServer {
                             chunk_gen_pool,
                             file_io_pool,
                             network_pool,
-                            packet_logger,
                         )
                         .await
                         {
@@ -149,11 +146,10 @@ async fn handle_client(
     chunk_gen_pool: Arc<ChunkGenThreadPool>,
     file_io_pool: Arc<FileIOThreadPool>,
     network_pool: Arc<NetworkThreadPool>,
-    packet_logger: PacketLogger,
 ) -> Result<()> {
-    let player = Player::new(socket, packet_logger.clone()).await?;
+    let player = Player::new(socket).await?;
     player
-        .handle(chunk_storage, error_tracker, chunk_gen_pool, file_io_pool, network_pool, packet_logger)
+        .handle(chunk_storage, error_tracker, chunk_gen_pool, file_io_pool, network_pool)
         .await?;
     Ok(())
 }

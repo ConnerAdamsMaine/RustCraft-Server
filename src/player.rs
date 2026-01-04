@@ -11,7 +11,6 @@ use crate::chunk_storage::ChunkStorage;
 use crate::error_tracker::{ErrorKey, ErrorTracker};
 use crate::join_game::JoinGameHandler;
 use crate::login::LoginHandler;
-use crate::packet_logger::PacketLogger;
 use crate::protocol::read_varint;
 use crate::thread_pool::{ChunkGenThreadPool, FileIOThreadPool, NetworkThreadPool};
 use crate::{chunk_sender, movement_handler};
@@ -25,7 +24,7 @@ pub struct Player {
     pub y:         f64,
     pub z:         f64,
     loaded_chunks: std::collections::HashSet<ChunkPos>,
-    packet_logger: PacketLogger,
+    packet_logger: &'static crate::PacketLogger, // PacketLogger,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -37,7 +36,7 @@ pub enum PlayerState {
 }
 
 impl Player {
-    pub async fn new(socket: TcpStream, packet_logger: PacketLogger) -> Result<Self> {
+    pub async fn new(socket: TcpStream) -> Result<Self> {
         Ok(Self {
             uuid: Uuid::new_v4(),
             username: String::new(),
@@ -47,7 +46,7 @@ impl Player {
             y: 64.0,
             z: 0.0,
             loaded_chunks: std::collections::HashSet::new(),
-            packet_logger,
+            packet_logger: &crate::LOGGER,
         })
     }
 
@@ -58,9 +57,8 @@ impl Player {
         chunk_gen_pool: Arc<ChunkGenThreadPool>,
         _file_io_pool: Arc<FileIOThreadPool>,
         _network_pool: Arc<NetworkThreadPool>,
-        packet_logger: PacketLogger,
     ) -> Result<()> {
-        self.packet_logger = packet_logger;
+        // self.packet_logger = packet_logger.as_ref().clone();
         tracing::debug!("[PLAYER] Player handler starting");
 
         // Wait for world initialization to complete (in blocking task to not block async runtime)
@@ -108,9 +106,7 @@ impl Player {
 
         // Send configuration finish packet to transition to Play state
         tracing::debug!("[PLAYER] Sending Configuration Finish packet");
-        if let Err(e) =
-            JoinGameHandler::send_configuration_finish(&mut self.socket, &self.packet_logger).await
-        {
+        if let Err(e) = JoinGameHandler::send_configuration_finish(&mut self.socket).await {
             tracing::error!("[PLAYER] Failed to send config finish to {}: {}", self.username, e);
             let key = ErrorKey::new("CONFIG", "finish_failed");
             error_tracker.record_error(key);
@@ -120,9 +116,7 @@ impl Player {
 
         // Send join game packet
         tracing::debug!("[PLAYER] Sending Join Game packet");
-        if let Err(e) =
-            JoinGameHandler::send_join_game(&mut self.socket, 1, &self.username, &self.packet_logger).await
-        {
+        if let Err(e) = JoinGameHandler::send_join_game(&mut self.socket, 1, &self.username).await {
             tracing::error!("[PLAYER] Failed to send join game packet to {}: {}", self.username, e);
             let key = ErrorKey::new("JOIN_GAME", "send_failed");
             error_tracker.record_error(key);
@@ -132,13 +126,8 @@ impl Player {
 
         // Send player info add packet
         tracing::debug!("[PLAYER] Sending Player Info Add packet");
-        if let Err(e) = JoinGameHandler::send_player_info_add(
-            &mut self.socket,
-            self.uuid,
-            &self.username,
-            &self.packet_logger,
-        )
-        .await
+        if let Err(e) =
+            JoinGameHandler::send_player_info_add(&mut self.socket, self.uuid, &self.username).await
         {
             tracing::error!("[PLAYER] Failed to send player info to {}: {}", self.username, e);
             let key = ErrorKey::new("PLAYER_INFO", "send_failed");
@@ -167,13 +156,13 @@ impl Player {
             // Try to read incoming packets from client
             {
                 let socket = &mut self.socket;
-                let logger = &self.packet_logger;
+                // let logger = &self.packet_logger;
                 match Self::handle_incoming_packets_static(
                     socket,
                     &mut self.x,
                     &mut self.y,
                     &mut self.z,
-                    logger,
+                    // logger,
                 )
                 .await
                 {
@@ -248,7 +237,7 @@ impl Player {
         x: &mut f64,
         y: &mut f64,
         z: &mut f64,
-        packet_logger: &PacketLogger,
+        // packet_logger: &PacketLogger,
     ) -> Result<()> {
         // Read packet length
         let mut length_bytes = [0u8; 5];
@@ -284,7 +273,7 @@ impl Player {
                 // Log the full packet (length + data)
                 let mut full_packet = length_bytes[..n].to_vec();
                 full_packet.extend_from_slice(&packet_data);
-                let _ = packet_logger.log_client_packet(&full_packet);
+                let _ = &crate::LOGGER.log_client_packet(&full_packet);
 
                 // Parse packet ID
                 let mut cursor = Cursor::new(&packet_data[..]);

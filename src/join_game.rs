@@ -4,16 +4,13 @@ use tokio::net::TcpStream;
 use tracing::warn;
 use uuid::Uuid;
 
-use crate::packet_logger::PacketLogger;
+// use crate::packet_logger::PacketLogger;
 use crate::protocol::{write_varint, PacketWriter};
 
 pub struct JoinGameHandler;
 
 impl JoinGameHandler {
-    pub async fn send_configuration_finish(
-        stream: &mut TcpStream,
-        packet_logger: &PacketLogger,
-    ) -> Result<()> {
+    pub async fn send_configuration_finish(stream: &mut TcpStream) -> Result<()> {
         // Configuration Finish packet (0x02) - transitions from Configuration to Play state
         // This packet has no data, just the ID
         let packet_id = write_varint(0x02);
@@ -23,7 +20,9 @@ impl JoinGameHandler {
         frame.extend_from_slice(&write_varint(packet_length));
         frame.extend_from_slice(&packet_id);
 
-        let _ = packet_logger.log_server_packet(&frame);
+        // let _ = packet_logger.log_server_packet(&frame);
+
+        let _ = crate::LOGGER.log_server_packet(&frame);
 
         stream.write_all(&frame).await?;
         stream.flush().await?;
@@ -63,7 +62,7 @@ impl JoinGameHandler {
         stream: &mut TcpStream,
         entity_id: i32,
         _username: &str,
-        packet_logger: &PacketLogger,
+        // packet_logger: &PacketLogger,
     ) -> Result<()> {
         let mut writer = PacketWriter::new();
 
@@ -125,7 +124,7 @@ impl JoinGameHandler {
         frame.extend_from_slice(&packet_id);
         frame.extend_from_slice(&packet_data);
 
-        let _ = packet_logger.log_server_packet(&frame);
+        let _ = &crate::LOGGER.log_server_packet(&frame);
 
         stream.write_all(&frame).await?;
         stream.flush().await?;
@@ -133,12 +132,7 @@ impl JoinGameHandler {
         Ok(())
     }
 
-    pub async fn send_player_info_add(
-        stream: &mut TcpStream,
-        uuid: Uuid,
-        username: &str,
-        packet_logger: &PacketLogger,
-    ) -> Result<()> {
+    pub async fn send_player_info_add(stream: &mut TcpStream, uuid: Uuid, username: &str) -> Result<()> {
         let mut writer = PacketWriter::new();
 
         // Action: 0 = Add Player
@@ -175,7 +169,7 @@ impl JoinGameHandler {
         frame.extend_from_slice(&packet_id);
         frame.extend_from_slice(&packet_data);
 
-        let _ = packet_logger.log_server_packet(&frame);
+        let _ = &crate::LOGGER.log_server_packet(&frame);
 
         stream.write_all(&frame).await?;
         stream.flush().await?;
