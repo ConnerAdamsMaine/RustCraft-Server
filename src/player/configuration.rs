@@ -1,6 +1,9 @@
+use std::sync::Arc;
+
 use anyhow::{anyhow, Result};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
+use tokio::sync::Mutex;
 use tracing::debug;
 
 use crate::network::protocol::{
@@ -12,6 +15,25 @@ use crate::network::protocol::{
     PacketWriter,
 };
 
+pub enum ConfigurationAckPacket {
+    ClientInformation = 0x00,
+    ServerboundPluginMessage = 0x01,
+    ServerboundKnownPacks = 0x02,
+    AcknowledgeFinishConfiguration = 0x03,
+}
+
+impl From<i32> for ConfigurationAckPacket {
+    fn from(value: i32) -> Self {
+        match value {
+            0x00 => ConfigurationAckPacket::ClientInformation,
+            0x01 => ConfigurationAckPacket::ServerboundPluginMessage,
+            0x02 => ConfigurationAckPacket::ServerboundKnownPacks,
+            0x03 => ConfigurationAckPacket::AcknowledgeFinishConfiguration,
+            _ => panic!("Invalid ConfigurationAckPacket value: {}", value),
+        }
+    }
+}
+
 pub struct ConfigurationHandler;
 
 impl ConfigurationHandler {
@@ -20,15 +42,15 @@ impl ConfigurationHandler {
     pub async fn handle_configuration(stream: &mut TcpStream) -> Result<()> {
         debug!("[CONFIG] Starting configuration phase");
 
+        let stream_c = Arc::new(Mutex::new(stream));
+
         // Send required Registry Data packets
         // These define the game registries that client and server must agree on
-        Self::send_registry_data(stream).await?;
-
-        debug!("[CONFIG] Sending Finish Configuration");
-        Self::send_finish_configuration(stream).await?;
-
-        debug!("[CONFIG] Waiting for Acknowledge Finish Configuration");
-        Self::read_acknowledge_finish_configuration(stream).await?;
+        tokio::try_join!(
+            Self::send_registry_data(Arc::clone(&stream_c)),
+            Self::send_finish_configuration(Arc::clone(&stream_c)),
+            Self::read_acknowledge_finish_configuration(Arc::clone(&stream_c)),
+        )?;
 
         debug!("[CONFIG] Configuration phase complete");
         Ok(())
@@ -40,19 +62,21 @@ impl ConfigurationHandler {
     /// - Entries (Prefixed Array):
     ///   - Entry ID (Identifier): The entry name (e.g., "minecraft:overworld")
     ///   - Data (Prefixed Optional NBT): Entry data in NBT format (or null if from known packs)
-    /// 
+    ///
     /// LOCATION OF PROBLEM
     /// FIND FIX
-    async fn send_registry_data(stream: &mut TcpStream) -> Result<()> {
+    // async fn send_registry_data(stream: &mut TcpStream) -> Result<()> {
+    async fn send_registry_data(stream: Arc<Mutex<&mut TcpStream>>) -> Result<()> {
         // Send minimal required registries for basic functionality
         // For a full server, you'd need to send ALL synchronized registries
         let registries = vec![
             ("minecraft:dimension_type", Self::get_dimension_type_registry()), // Problem child #1
-            ("minecraft:damage_type", Self::get_damage_type_registry()), // Problem child #2
+            ("minecraft:damage_type", Self::get_damage_type_registry()),       // Problem child #2
         ];
 
-        for (registry_id, entries) in registries { // Problem child #3
-            Self::send_single_registry(stream, registry_id, &entries).await?;
+        // Self::send_single_registry(stream, registry_id, &entries).await?;
+        for (registry_id, entries) in registries {
+            Self::send_single_registry(Arc::clone(&stream), registry_id, &entries).await?;
         }
 
         debug!("[CONFIG] Registry Data packets sent");
@@ -60,10 +84,10 @@ impl ConfigurationHandler {
     }
 
     /// Send a single Registry Data packet
-    /// 
+    ///
     /// Problem child #4
     async fn send_single_registry(
-        stream: &mut TcpStream,
+        stream: Arc<Mutex<&mut TcpStream>>,
         registry_id: &str,
         entries: &[(String, Vec<u8>)],
     ) -> Result<()> {
@@ -103,6 +127,7 @@ impl ConfigurationHandler {
         frame.extend_from_slice(&packet_id);
         frame.extend_from_slice(&packet_data);
 
+        let stream = &mut *stream.lock().await;
         stream.write_all(&frame).await?;
         stream.flush().await?;
         debug!("[CONFIG] Sent registry data for: {} ({} entries)", registry_id, entries.len());
@@ -164,7 +189,8 @@ impl ConfigurationHandler {
         ]
     }
 
-    async fn send_finish_configuration(stream: &mut TcpStream) -> Result<()> {
+    async fn send_finish_configuration(stream: Arc<Mutex<&mut TcpStream>>) -> Result<()> {
+        debug!("[CONFIG] Sending Finish Configuration");
         // Finish Configuration packet (0x03 in Configuration state)
         let packet_id = write_varint(0x03);
 
@@ -173,6 +199,7 @@ impl ConfigurationHandler {
         frame.extend_from_slice(&write_varint(packet_id.len() as i32));
         frame.extend_from_slice(&packet_id);
 
+        let mut stream = stream.lock().await;
         stream.write_all(&frame).await?;
         stream.flush().await?;
 
@@ -180,7 +207,8 @@ impl ConfigurationHandler {
         Ok(())
     }
 
-    async fn read_acknowledge_finish_configuration(stream: &mut TcpStream) -> Result<()> {
+    async fn read_acknowledge_finish_configuration(stream: Arc<Mutex<&mut TcpStream>>) -> Result<()> {
+        debug!("[CONFIG] Waiting for Acknowledge Finish Configuration");
         // Client may send optional packets before Acknowledge Finish Configuration
         // Valid packets in Configuration state (serverbound):
         // 0x00 = Client Information
@@ -194,6 +222,8 @@ impl ConfigurationHandler {
             // Read packet length
             let mut bytes_read = 0;
             loop {
+                // let stream = &mut *stream.lock().unwrap();
+                let stream = &mut *stream.lock().await;
                 let n = stream.read(&mut length_buf[bytes_read..bytes_read + 1]).await?;
                 if n == 0 {
                     return Err(anyhow!("Connection closed during acknowledge finish configuration"));
@@ -213,33 +243,56 @@ impl ConfigurationHandler {
 
             // Read packet data
             let mut packet_data = vec![0u8; packet_length];
+            let stream = &mut *stream.lock().await;
             stream.read_exact(&mut packet_data).await?;
 
             let mut reader = PacketReader::new(&packet_data);
             let packet_id = reader.read_varint()?;
 
-            match packet_id {
-                0x00 => {
+            let packet_id_enum: ConfigurationAckPacket = packet_id.into();
+
+            match packet_id_enum {
+                ConfigurationAckPacket::ClientInformation => {
                     // Client Information - optional, skip it
                     debug!("[CONFIG] Received Client Information (0x00)");
                 }
-                0x01 => {
+                ConfigurationAckPacket::ServerboundPluginMessage => {
                     // Serverbound Plugin Message - optional, skip it
                     debug!("[CONFIG] Received Serverbound Plugin Message (0x01)");
                 }
-                0x02 => {
+                ConfigurationAckPacket::ServerboundKnownPacks => {
                     // Serverbound Known Packs - optional, skip it
                     debug!("[CONFIG] Received Serverbound Known Packs (0x02)");
                 }
-                0x03 => {
+                ConfigurationAckPacket::AcknowledgeFinishConfiguration => {
                     // Acknowledge Finish Configuration - this is what we're waiting for
                     debug!("[CONFIG] Acknowledge Finish Configuration received");
                     return Ok(());
                 }
-                _ => {
-                    return Err(anyhow!("Unexpected packet in Configuration state: {:#x}", packet_id));
-                }
             }
+
+            // match packet_id {
+            //     0x00 => {
+            //         // Client Information - optional, skip it
+            //         debug!("[CONFIG] Received Client Information (0x00)");
+            //     }
+            //     0x01 => {
+            //         // Serverbound Plugin Message - optional, skip it
+            //         debug!("[CONFIG] Received Serverbound Plugin Message (0x01)");
+            //     }
+            //     0x02 => {
+            //         // Serverbound Known Packs - optional, skip it
+            //         debug!("[CONFIG] Received Serverbound Known Packs (0x02)");
+            //     }
+            //     0x03 => {
+            //         // Acknowledge Finish Configuration - this is what we're waiting for
+            //         debug!("[CONFIG] Acknowledge Finish Configuration received");
+            //         return Ok(());
+            //     }
+            //     _ => {
+            //         return Err(anyhow!("Unexpected packet in Configuration state: {:#x}", packet_id));
+            //     }
+            // }
         }
     }
 }

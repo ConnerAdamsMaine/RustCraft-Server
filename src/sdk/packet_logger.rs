@@ -1,4 +1,5 @@
 use std::fs;
+use std::io::Cursor;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -6,7 +7,6 @@ use anyhow::Result;
 use tracing::{debug, info};
 
 use crate::network::protocol::{read_varint, PacketReader};
-use std::io::Cursor;
 
 pub struct PacketLogger {
     packet_dir: PathBuf,
@@ -46,7 +46,7 @@ impl PacketLogger {
         let path = self.packet_dir.join(&filename);
 
         fs::write(&path, data)?;
-        
+
         // Parse and display packet info
         self.log_packet_details("CLIENT", count, data);
 
@@ -59,7 +59,7 @@ impl PacketLogger {
         let path = self.packet_dir.join(&filename);
 
         fs::write(&path, data)?;
-        
+
         // Parse and display packet info
         self.log_packet_details("SERVER", count, data);
 
@@ -104,7 +104,7 @@ impl PacketLogger {
         }
 
         let mut cursor = Cursor::new(data);
-        
+
         // Read packet length (varint)
         let packet_length = match read_varint(&mut cursor) {
             Ok(len) => len as usize,

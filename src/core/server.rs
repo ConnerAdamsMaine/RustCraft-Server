@@ -18,16 +18,12 @@ pub struct MinecraftServer {
     chunk_storage:  ChunkStorage,
     error_tracker:  Arc<ErrorTracker>,
     chunk_gen_pool: Arc<ChunkGenThreadPool>,
-    // packet_logger:  Pin<Box<PacketLogger>>,
 }
 
 impl MinecraftServer {
     pub async fn new(addr: &str, error_tracker: Arc<ErrorTracker>) -> Result<Self> {
         let listener = TcpListener::bind(addr).await?;
         info!("[STARTUP] Server listening on {}", addr);
-
-        // Initialize packet logger
-        // let packet_logger = Pin::new(Box::new(PacketLogger::new()?));
 
         // Initialize thread pools
         let chunk_gen_pool = Arc::new(ChunkGenThreadPool::new());
@@ -102,6 +98,7 @@ impl MinecraftServer {
                     let chunk_gen_pool = chunk_gen_pool.clone();
                     tokio::spawn(async move {
                         if let Err(e) = handle_client(
+                            //
                             socket,
                             chunk_storage,
                             error_tracker,

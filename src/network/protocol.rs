@@ -10,7 +10,10 @@ fn validate_identifier(id: &str) -> Result<()> {
     if id.contains('\0') {
         return Err(anyhow!("Identifier contains null byte: {:?}", id));
     }
-    if !id.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '/' | '.' | '_' | '-' | ':')) {
+    if !id
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '/' | '.' | '_' | '-' | ':'))
+    {
         return Err(anyhow!("Invalid identifier characters: {}", id));
     }
     Ok(())
@@ -332,7 +335,14 @@ impl NBTBuilder {
         }
 
         // Write all fields
-        write_nbt_byte!("bed_works", if name.contains("nether") || name.contains("end") { 0 } else { 1 });
+        write_nbt_byte!(
+            "bed_works",
+            if name.contains("nether") || name.contains("end") {
+                0
+            } else {
+                1
+            }
+        );
         write_nbt_byte!("has_ceiling", if has_ceiling { 1 } else { 0 });
         write_nbt_byte!("has_skylight", if has_skylight { 1 } else { 0 });
         write_nbt_byte!("has_raids", if name.contains("end") { 0 } else { 1 });
@@ -354,17 +364,17 @@ impl NBTBuilder {
     /// Create a damage type compound
     pub fn damage_type_compound(message_id: &str, scaling: &str, exhaustion: f32) -> Vec<u8> {
         let mut bytes = BytesMut::new();
-        
+
         bytes.put_u8(0x0A); // TAG_Compound
         bytes.extend_from_slice(&(0i16).to_be_bytes()); // empty root name
-        
+
         // exhaustion: TAG_Float
         bytes.put_u8(0x05);
         let name_bytes = b"exhaustion";
         bytes.extend_from_slice(&(name_bytes.len() as i16).to_be_bytes());
         bytes.extend_from_slice(name_bytes);
         bytes.extend_from_slice(&exhaustion.to_be_bytes());
-        
+
         // message_id: TAG_String
         bytes.put_u8(0x08);
         let name_bytes = b"message_id";
