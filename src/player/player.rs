@@ -6,16 +6,15 @@ use tokio::io::AsyncReadExt;
 use tokio::net::TcpStream;
 use uuid::Uuid;
 
-use crate::Terrain::ChunkPos;
-use crate::Chunk::ChunkStorage;
+use crate::chunk::{chunk_sender, ChunkStorage};
+use crate::core::thread_pool::{ChunkGenThreadPool, FileIOThreadPool, NetworkThreadPool};
 use crate::error_tracker::{ErrorKey, ErrorTracker};
-use crate::Player::join_game::JoinGameHandler;
-use crate::Player::configuration::ConfigurationHandler;
-use crate::Network::LoginHandler;
-use crate::Network::protocol::read_varint;
-use crate::Core::thread_pool::{ChunkGenThreadPool, FileIOThreadPool, NetworkThreadPool};
-use crate::Chunk::chunk_sender;
-use crate::Player::movement_handler;
+use crate::network::protocol::read_varint;
+use crate::network::LoginHandler;
+use crate::player::configuration::ConfigurationHandler;
+use crate::player::join_game::JoinGameHandler;
+use crate::player::movement_handler;
+use crate::terrain::ChunkPos;
 
 pub struct Player {
     pub uuid:      Uuid,
@@ -115,7 +114,7 @@ impl Player {
             return Err(e);
         }
         tracing::debug!("[PLAYER] Configuration phase complete");
-        
+
         // Transition to Play state
         self.state = PlayerState::Play;
         tracing::debug!("[PLAYER] Player state set to Play");

@@ -265,7 +265,7 @@ impl NBTBuilder {
 
     /// Create an empty compound (root compound with no tags)
     pub fn empty_compound() -> Vec<u8> {
-        vec![0x0A, 0x00, 0x00, 0x00]  // TAG_Compound, empty name, TAG_End
+        vec![0x0A, 0x00, 0x00, 0x00] // TAG_Compound, empty name, TAG_End
     }
 
     /// Create a dimension type compound with minimal properties
@@ -280,106 +280,110 @@ impl NBTBuilder {
         coordinate_scale: f32,
     ) -> Vec<u8> {
         let mut bytes = BytesMut::new();
-        
+
         // TAG_Compound
         bytes.put_u8(0x0A);
-        
+
         // Root compound name (empty)
         bytes.put_i16(0);
-        
+
         // bed_works: TAG_Byte = 1
         bytes.put_u8(0x01); // TAG_Byte
         bytes.extend_from_slice(b"\x00\x09bed_works"); // name length + name
-        bytes.put_u8(if name.contains("nether") || name.contains("end") { 0 } else { 1 });
-        
+        bytes.put_u8(if name.contains("nether") || name.contains("end") {
+            0
+        } else {
+            1
+        });
+
         // has_ceiling: TAG_Byte
         bytes.put_u8(0x01);
         bytes.extend_from_slice(b"\x00\x0bhas_ceiling");
         bytes.put_u8(if has_ceiling { 1 } else { 0 });
-        
+
         // has_skylight: TAG_Byte
         bytes.put_u8(0x01);
         bytes.extend_from_slice(b"\x00\x0bhas_skylight");
         bytes.put_u8(if has_skylight { 1 } else { 0 });
-        
+
         // has_raids: TAG_Byte
         bytes.put_u8(0x01);
         bytes.extend_from_slice(b"\x00\x09has_raids");
         bytes.put_u8(if name.contains("end") { 0 } else { 1 });
-        
+
         // height: TAG_Int
         bytes.put_u8(0x03);
         bytes.extend_from_slice(b"\x00\x06height");
         bytes.put_i32(height);
-        
+
         // logical_height: TAG_Int
         bytes.put_u8(0x03);
         bytes.extend_from_slice(b"\x00\x0elogical_height");
         bytes.put_i32(height);
-        
+
         // min_y: TAG_Int
         bytes.put_u8(0x03);
         bytes.extend_from_slice(b"\x00\x05min_y");
         bytes.put_i32(min_y);
-        
+
         // ultrawarm: TAG_Byte
         bytes.put_u8(0x01);
         bytes.extend_from_slice(b"\x00\x08ultrawarm");
         bytes.put_u8(if ultrawarm { 1 } else { 0 });
-        
+
         // natural: TAG_Byte
         bytes.put_u8(0x01);
         bytes.extend_from_slice(b"\x00\x07natural");
         bytes.put_u8(if natural { 1 } else { 0 });
-        
+
         // coordinate_scale: TAG_Float
         bytes.put_u8(0x05);
         bytes.extend_from_slice(b"\x00\x10coordinate_scale");
         bytes.put_f32(coordinate_scale);
-        
+
         // piglin_safe: TAG_Byte
         bytes.put_u8(0x01);
         bytes.extend_from_slice(b"\x00\x0bpiglin_safe");
         bytes.put_u8(0);
-        
+
         // respawn_anchor_works: TAG_Byte
         bytes.put_u8(0x01);
         bytes.extend_from_slice(b"\x00\x14respawn_anchor_works");
         bytes.put_u8(if name.contains("nether") { 1 } else { 0 });
-        
+
         // TAG_End
         bytes.put_u8(0x00);
-        
+
         bytes.to_vec()
     }
 
     /// Create a damage type compound
     pub fn damage_type_compound(message_id: &str, scaling: &str, exhaustion: f32) -> Vec<u8> {
         let mut bytes = BytesMut::new();
-        
+
         bytes.put_u8(0x0A); // TAG_Compound
-        bytes.put_i16(0);   // empty root name
-        
+        bytes.put_i16(0); // empty root name
+
         // exhaustion: TAG_Float
         bytes.put_u8(0x05);
         bytes.extend_from_slice(b"\x00\x0bexhaustion");
         bytes.put_f32(exhaustion);
-        
+
         // message_id: TAG_String
         bytes.put_u8(0x08);
         bytes.extend_from_slice(b"\x00\x0amessage_id");
         bytes.put_i16(message_id.len() as i16);
         bytes.extend_from_slice(message_id.as_bytes());
-        
+
         // scaling: TAG_String
         bytes.put_u8(0x08);
         bytes.extend_from_slice(b"\x00\x07scaling");
         bytes.put_i16(scaling.len() as i16);
         bytes.extend_from_slice(scaling.as_bytes());
-        
+
         // TAG_End
         bytes.put_u8(0x00);
-        
+
         bytes.to_vec()
     }
 }

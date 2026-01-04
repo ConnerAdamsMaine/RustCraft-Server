@@ -1,7 +1,7 @@
 use bytes::BytesMut;
 
-use crate::Terrain::{BlockType, Chunk};
-use crate::Network::protocol::{ByteWritable, PacketWriter};
+use crate::network::protocol::{ByteWritable, PacketWriter};
+use crate::terrain::{BlockType, Chunk};
 
 /// Serialize a chunk into Minecraft protocol format (chunk data packet)
 /// This creates a basic chunk data packet that clients can render

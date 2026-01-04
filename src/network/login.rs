@@ -4,7 +4,7 @@ use tokio::net::TcpStream;
 use tracing::{info, warn};
 use uuid::Uuid;
 
-use crate::Network::protocol::{read_varint, write_varint, ByteWritable, PacketReader, PacketWriter};
+use crate::network::protocol::{read_varint, write_varint, ByteWritable, PacketReader, PacketWriter};
 
 #[derive(Debug, Clone)]
 pub struct PlayerLogin {
@@ -301,7 +301,7 @@ impl LoginHandler {
             .replace('\n', "\\n")
             .replace('\r', "\\r")
             .replace('\t', "\\t");
-        
+
         let json_message = format!(r#"{{"text":"{}"}}"#, escaped_reason);
         tracing::debug!("[LOGIN] Disconnect JSON: {}", json_message);
         writer.write_string(&json_message);

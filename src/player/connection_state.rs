@@ -1,5 +1,6 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
+
 use parking_lot::RwLock;
 
 /// Represents the current stage of a player's connection lifecycle
@@ -37,9 +38,9 @@ impl std::fmt::Display for ConnectionStage {
 
 /// Tracks the connection state with timestamps and state change history
 pub struct ConnectionStateTracker {
-    current_stage: RwLock<ConnectionStage>,
+    current_stage:    RwLock<ConnectionStage>,
     /// Unix timestamp (ms) when connection was established
-    connected_at: u64,
+    connected_at:     u64,
     /// Unix timestamp (ms) when current stage was entered
     stage_started_at: AtomicU64,
 }
@@ -48,8 +49,8 @@ impl ConnectionStateTracker {
     pub fn new() -> Self {
         let now = current_timestamp_ms();
         Self {
-            current_stage: RwLock::new(ConnectionStage::Connected),
-            connected_at: now,
+            current_stage:    RwLock::new(ConnectionStage::Connected),
+            connected_at:     now,
             stage_started_at: AtomicU64::new(now),
         }
     }
@@ -63,13 +64,10 @@ impl ConnectionStateTracker {
     pub fn transition(&self, new_stage: ConnectionStage) {
         let old_stage = self.current_stage();
         *self.current_stage.write() = new_stage;
-        self.stage_started_at.store(current_timestamp_ms(), Ordering::Release);
+        self.stage_started_at
+            .store(current_timestamp_ms(), Ordering::Release);
 
-        tracing::info!(
-            "[CONNECTION] State transition: {} -> {}",
-            old_stage,
-            new_stage
-        );
+        tracing::info!("[CONNECTION] State transition: {} -> {}", old_stage, new_stage);
     }
 
     /// Get time spent in current stage (ms)
@@ -115,7 +113,7 @@ impl Default for ConnectionStateTracker {
 /// Snapshot of connection state information
 #[derive(Debug, Clone)]
 pub struct StateInfo {
-    pub stage: ConnectionStage,
+    pub stage:             ConnectionStage,
     pub stage_duration_ms: u64,
     pub total_duration_ms: u64,
 }

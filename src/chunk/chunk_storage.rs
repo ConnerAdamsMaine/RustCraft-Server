@@ -6,11 +6,10 @@ use anyhow::Result;
 use parking_lot::RwLock;
 use tracing::{debug, info, warn};
 
-use crate::Chunk::cache::LruCache;
-use crate::Terrain::{Chunk, ChunkPos};
-use crate::Terrain::ChunkGenerator;
-use crate::World::{Region, RegionPos};
-use crate::Core::thread_pool::ChunkGenThreadPool;
+use crate::chunk::cache::LruCache;
+use crate::core::thread_pool::ChunkGenThreadPool;
+use crate::terrain::{Chunk, ChunkGenerator, ChunkPos};
+use crate::world::{Region, RegionPos};
 
 const WORLD_DIR: &str = "world";
 

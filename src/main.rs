@@ -1,8 +1,8 @@
 use std::sync::LazyLock;
 
 use anyhow::Result;
+use rustcraft::core::server::MinecraftServer;
 use rustcraft::error_tracker::ErrorTracker;
-use rustcraft::Core::server::MinecraftServer;
 
 #[cfg(feature = "dev-sdk")]
 use crate::sdk::PacketLogger;

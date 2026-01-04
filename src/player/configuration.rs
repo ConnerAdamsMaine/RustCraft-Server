@@ -3,7 +3,14 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tracing::debug;
 
-use crate::Network::protocol::{read_varint, write_varint, ByteWritable, PacketReader, PacketWriter, NBTBuilder};
+use crate::network::protocol::{
+    read_varint,
+    write_varint,
+    ByteWritable,
+    NBTBuilder,
+    PacketReader,
+    PacketWriter,
+};
 
 pub struct ConfigurationHandler;
 
@@ -134,14 +141,8 @@ impl ConfigurationHandler {
                 "minecraft:suffocation".to_string(),
                 NBTBuilder::damage_type_compound("suffocation", "always", 0.0),
             ),
-            (
-                "minecraft:drowning".to_string(),
-                NBTBuilder::damage_type_compound("drowning", "always", 0.0),
-            ),
-            (
-                "minecraft:starving".to_string(),
-                NBTBuilder::damage_type_compound("starving", "always", 0.0),
-            ),
+            ("minecraft:drowning".to_string(), NBTBuilder::damage_type_compound("drowning", "always", 0.0)),
+            ("minecraft:starving".to_string(), NBTBuilder::damage_type_compound("starving", "always", 0.0)),
             (
                 "minecraft:falling_anvil".to_string(),
                 NBTBuilder::damage_type_compound("falling_anvil", "when_caused_by_living_non_player", 0.1),
@@ -149,12 +150,10 @@ impl ConfigurationHandler {
         ]
     }
 
-
-
     async fn send_finish_configuration(stream: &mut TcpStream) -> Result<()> {
         // Finish Configuration packet (0x03 in Configuration state)
         let packet_id = write_varint(0x03);
-        
+
         // This packet has no payload, just packet ID
         let mut frame = Vec::new();
         frame.extend_from_slice(&write_varint(packet_id.len() as i32));
@@ -174,16 +173,14 @@ impl ConfigurationHandler {
         // 0x01 = Serverbound Plugin Message
         // 0x02 = Serverbound Known Packs
         // 0x03 = Acknowledge Finish Configuration
-        
+
         loop {
             let mut length_buf = [0u8; 5];
 
             // Read packet length
             let mut bytes_read = 0;
             loop {
-                let n = stream
-                    .read(&mut length_buf[bytes_read..bytes_read + 1])
-                    .await?;
+                let n = stream.read(&mut length_buf[bytes_read..bytes_read + 1]).await?;
                 if n == 0 {
                     return Err(anyhow!("Connection closed during acknowledge finish configuration"));
                 }
@@ -198,8 +195,7 @@ impl ConfigurationHandler {
                 }
             }
 
-            let packet_length =
-                read_varint(&mut std::io::Cursor::new(&length_buf[..bytes_read]))? as usize;
+            let packet_length = read_varint(&mut std::io::Cursor::new(&length_buf[..bytes_read]))? as usize;
 
             // Read packet data
             let mut packet_data = vec![0u8; packet_length];
@@ -227,10 +223,7 @@ impl ConfigurationHandler {
                     return Ok(());
                 }
                 _ => {
-                    return Err(anyhow!(
-                        "Unexpected packet in Configuration state: {:#x}",
-                        packet_id
-                    ));
+                    return Err(anyhow!("Unexpected packet in Configuration state: {:#x}", packet_id));
                 }
             }
         }

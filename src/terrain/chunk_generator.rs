@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use parking_lot::RwLock;
 
-use crate::Terrain::{BlockType, Chunk, ChunkPos};
-use crate::Terrain::terrain_gen::{Biome, BiomeMap, HeightMap};
+use crate::terrain::terrain_gen::{Biome, BiomeMap, HeightMap};
+use crate::terrain::{BlockType, Chunk, ChunkPos};
 
 pub struct ChunkGenerator {
     seed:       u64,
