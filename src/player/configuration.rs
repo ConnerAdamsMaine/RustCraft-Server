@@ -64,6 +64,15 @@ impl ConfigurationHandler {
     ) -> Result<()> {
         let mut writer = PacketWriter::new();
 
+        for (entry_id, nbt_data) in entries {
+            // Debug logging
+            tracing::debug!("[CONFIG] Entry ID: {:?}", entry_id);
+            tracing::debug!("[CONFIG] Entry ID bytes: {:?}", entry_id.as_bytes());
+            tracing::debug!("[CONFIG] Entry ID len: {}", entry_id.len());
+            // Write Entry ID (as an Identifier)
+            writer.write_string(entry_id);
+        }
+
         // Write Registry ID (as an Identifier)
         writer.write_string(registry_id);
 

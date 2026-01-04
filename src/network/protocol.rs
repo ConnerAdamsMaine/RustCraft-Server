@@ -300,69 +300,50 @@ impl NBTBuilder {
         // Root compound name (empty)
         bytes.extend_from_slice(&(0i16).to_be_bytes());
 
-        // bed_works: TAG_Byte = 1
-        bytes.put_u8(0x01); // TAG_Byte
-        bytes.extend_from_slice(b"\x00\x09bed_works"); // name length + name
-        bytes.put_u8(if name.contains("nether") || name.contains("end") {
-            0
-        } else {
-            1
-        });
+        // Helper macro to write NBT tags
+        macro_rules! write_nbt_byte {
+            ($name:expr, $value:expr) => {
+                bytes.put_u8(0x01); // TAG_Byte
+                let name_bytes = $name.as_bytes();
+                bytes.extend_from_slice(&(name_bytes.len() as i16).to_be_bytes());
+                bytes.extend_from_slice(name_bytes);
+                bytes.put_u8($value);
+            };
+        }
 
-        // has_ceiling: TAG_Byte
-        bytes.put_u8(0x01);
-        bytes.extend_from_slice(b"\x00\x0bhas_ceiling");
-        bytes.put_u8(if has_ceiling { 1 } else { 0 });
+        macro_rules! write_nbt_int {
+            ($name:expr, $value:expr) => {
+                bytes.put_u8(0x03); // TAG_Int
+                let name_bytes = $name.as_bytes();
+                bytes.extend_from_slice(&(name_bytes.len() as i16).to_be_bytes());
+                bytes.extend_from_slice(name_bytes);
+                bytes.extend_from_slice(&($value as i32).to_be_bytes());
+            };
+        }
 
-        // has_skylight: TAG_Byte
-        bytes.put_u8(0x01);
-        bytes.extend_from_slice(b"\x00\x0bhas_skylight");
-        bytes.put_u8(if has_skylight { 1 } else { 0 });
+        macro_rules! write_nbt_float {
+            ($name:expr, $value:expr) => {
+                bytes.put_u8(0x05); // TAG_Float
+                let name_bytes = $name.as_bytes();
+                bytes.extend_from_slice(&(name_bytes.len() as i16).to_be_bytes());
+                bytes.extend_from_slice(name_bytes);
+                bytes.extend_from_slice(&($value as f32).to_be_bytes());
+            };
+        }
 
-        // has_raids: TAG_Byte
-        bytes.put_u8(0x01);
-        bytes.extend_from_slice(b"\x00\x09has_raids");
-        bytes.put_u8(if name.contains("end") { 0 } else { 1 });
-
-        // height: TAG_Int
-        bytes.put_u8(0x03);
-        bytes.extend_from_slice(b"\x00\x06height");
-        bytes.extend_from_slice(&height.to_be_bytes());
-
-        // logical_height: TAG_Int
-        bytes.put_u8(0x03);
-        bytes.extend_from_slice(b"\x00\x0elogical_height");
-        bytes.extend_from_slice(&height.to_be_bytes());
-
-        // min_y: TAG_Int
-        bytes.put_u8(0x03);
-        bytes.extend_from_slice(b"\x00\x05min_y");
-        bytes.extend_from_slice(&min_y.to_be_bytes());
-
-        // ultrawarm: TAG_Byte
-        bytes.put_u8(0x01);
-        bytes.extend_from_slice(b"\x00\x08ultrawarm");
-        bytes.put_u8(if ultrawarm { 1 } else { 0 });
-
-        // natural: TAG_Byte
-        bytes.put_u8(0x01);
-        bytes.extend_from_slice(b"\x00\x07natural");
-        bytes.put_u8(if natural { 1 } else { 0 });
-
-        // coordinate_scale: TAG_Float
-        bytes.put_u8(0x05);
-        bytes.extend_from_slice(b"\x00\x10coordinate_scale");
-        bytes.extend_from_slice(&coordinate_scale.to_be_bytes());
-
-        // piglin_safe: TAG_Byte
-        bytes.put_u8(0x01);
-        bytes.extend_from_slice(b"\x00\x0bpiglin_safe");
-        bytes.put_u8(0);
-
-        // respawn_anchor_works: TAG_Byte
-        bytes.put_u8(0x01);
-        bytes.extend_from_slice(b"\x00\x14respawn_anchor_works");
-        bytes.put_u8(if name.contains("nether") { 1 } else { 0 });
+        // Write all fields
+        write_nbt_byte!("bed_works", if name.contains("nether") || name.contains("end") { 0 } else { 1 });
+        write_nbt_byte!("has_ceiling", if has_ceiling { 1 } else { 0 });
+        write_nbt_byte!("has_skylight", if has_skylight { 1 } else { 0 });
+        write_nbt_byte!("has_raids", if name.contains("end") { 0 } else { 1 });
+        write_nbt_int!("height", height);
+        write_nbt_int!("logical_height", height);
+        write_nbt_int!("min_y", min_y);
+        write_nbt_byte!("ultrawarm", if ultrawarm { 1 } else { 0 });
+        write_nbt_byte!("natural", if natural { 1 } else { 0 });
+        write_nbt_float!("coordinate_scale", coordinate_scale);
+        write_nbt_byte!("piglin_safe", 0);
+        write_nbt_byte!("respawn_anchor_works", if name.contains("nether") { 1 } else { 0 });
 
         // TAG_End
         bytes.put_u8(0x00);
@@ -374,29 +355,33 @@ impl NBTBuilder {
     pub fn damage_type_compound(message_id: &str, scaling: &str, exhaustion: f32) -> Vec<u8> {
         let mut bytes = BytesMut::new();
         
-        // Validate identifiers before processing
-        validate_identifier(message_id).expect("Invalid message_id identifier");
-        validate_identifier(scaling).expect("Invalid scaling identifier");
-        
         bytes.put_u8(0x0A); // TAG_Compound
-        bytes.extend_from_slice(&(0i16).to_be_bytes());   // empty root name
+        bytes.extend_from_slice(&(0i16).to_be_bytes()); // empty root name
         
         // exhaustion: TAG_Float
         bytes.put_u8(0x05);
-        bytes.extend_from_slice(b"\x00\x0bexhaustion");
+        let name_bytes = b"exhaustion";
+        bytes.extend_from_slice(&(name_bytes.len() as i16).to_be_bytes());
+        bytes.extend_from_slice(name_bytes);
         bytes.extend_from_slice(&exhaustion.to_be_bytes());
         
         // message_id: TAG_String
         bytes.put_u8(0x08);
-        bytes.extend_from_slice(b"\x00\x0amessage_id");
-        bytes.extend_from_slice(&(message_id.len() as i16).to_be_bytes());
-        bytes.extend_from_slice(message_id.as_bytes());
+        let name_bytes = b"message_id";
+        bytes.extend_from_slice(&(name_bytes.len() as i16).to_be_bytes());
+        bytes.extend_from_slice(name_bytes);
+        let value_bytes = message_id.as_bytes();
+        bytes.extend_from_slice(&(value_bytes.len() as i16).to_be_bytes());
+        bytes.extend_from_slice(value_bytes);
 
         // scaling: TAG_String
         bytes.put_u8(0x08);
-        bytes.extend_from_slice(b"\x00\x07scaling");
-        bytes.extend_from_slice(&(scaling.len() as i16).to_be_bytes());
-        bytes.extend_from_slice(scaling.as_bytes());
+        let name_bytes = b"scaling";
+        bytes.extend_from_slice(&(name_bytes.len() as i16).to_be_bytes());
+        bytes.extend_from_slice(name_bytes);
+        let value_bytes = scaling.as_bytes();
+        bytes.extend_from_slice(&(value_bytes.len() as i16).to_be_bytes());
+        bytes.extend_from_slice(value_bytes);
 
         // TAG_End
         bytes.put_u8(0x00);
