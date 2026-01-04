@@ -19,13 +19,22 @@ pub struct LoginHandler {
 
 const VALID_PROTOCOL_VERSION: i32 = 772; // Minecraft 1.21.7
 
-impl LoginHandler {
-    pub fn new(stream: TcpStream) -> Self {
+impl From<TcpStream> for LoginHandler {
+    fn from(stream: TcpStream) -> Self {
         Self {
             stream,
             protocol_version: 0,
         }
     }
+}
+
+impl LoginHandler {
+    // pub fn new(stream: TcpStream) -> Self {
+    //     Self {
+    //         stream,
+    //         protocol_version: 0,
+    //     }
+    // }
 
     pub async fn handle_login(&mut self) -> Result<PlayerLogin> {
         tracing::debug!("[LOGIN] Starting login flow");
@@ -98,7 +107,7 @@ impl LoginHandler {
             warn!("[LOGIN] Failed to receive Login Acknowledged: {}", e);
             return Err(e);
         }
-        tracing::debug!("[LOGIN] Login Acknowledged received");
+        tracing::info!("[LOGIN] Login Acknowledged received");
 
         Ok(PlayerLogin { username, uuid })
     }
@@ -108,16 +117,19 @@ impl LoginHandler {
 
         // Read packet length
         let mut bytes_read = 0;
-        loop {
-            let n = self
-                .stream
-                .read(&mut length_buf[bytes_read..bytes_read + 1])
-                .await?;
-            if n == 0 {
+
+        while let Ok(n_bytes) = self
+            .stream
+            .read(&mut length_buf[bytes_read..bytes_read + 1])
+            .await
+        {
+            if n_bytes == 0 {
+                // early return on closed connection
                 return Err(anyhow!("Connection closed during handshake"));
             }
-
-            if length_buf[bytes_read] & 0x80 == 0 {
+            let maybe = length_buf[bytes_read] & 0x80 == 0;
+            tracing::debug!("Maybe value: {:08b}", length_buf[bytes_read]);
+            if maybe {
                 bytes_read += 1;
                 break;
             }
@@ -127,6 +139,29 @@ impl LoginHandler {
             }
         }
 
+        // loop {
+        //     let n = self
+        //         .stream
+        //         .read(&mut length_buf[bytes_read..bytes_read + 1])
+        //         .await?;
+        //     if n == 0 {
+        //         return Err(anyhow!("Connection closed during handshake"));
+        //     }
+        //
+        //     let maybe = length_buf[bytes_read] & 0x80 == 0;
+        //
+        //     tracing::debug!("Maybe value: {:08b}", length_buf[bytes_read]);
+        //
+        //     if maybe {
+        //         bytes_read += 1;
+        //         break;
+        //     }
+        //     bytes_read += 1;
+        //     if bytes_read >= 5 {
+        //         return Err(anyhow!("Packet length too long"));
+        //     }
+        // }
+
         let packet_length = read_varint(&mut std::io::Cursor::new(&length_buf[..bytes_read]))? as usize;
 
         // Read packet data
@@ -134,7 +169,7 @@ impl LoginHandler {
         self.stream.read_exact(&mut packet_data).await?;
 
         let mut reader = PacketReader::new(&packet_data);
-        let packet_id = reader.read_varint()?;
+        let packet_id: i32 = reader.read_varint()?;
 
         if packet_id != 0x00 {
             return Err(anyhow!("Expected Handshake packet (0x00), got {:#x}", packet_id));
@@ -159,16 +194,19 @@ impl LoginHandler {
 
         // Read packet length
         let mut bytes_read = 0;
-        loop {
-            let n = self
-                .stream
-                .read(&mut length_buf[bytes_read..bytes_read + 1])
-                .await?;
-            if n == 0 {
+        while let Ok(n_bytes) = self
+            .stream
+            .read(&mut length_buf[bytes_read..bytes_read + 1])
+            .await
+        {
+            if n_bytes == 0 {
+                // early return on closed connection
                 return Err(anyhow!("Connection closed during login acknowledged"));
             }
 
-            if length_buf[bytes_read] & 0x80 == 0 {
+            let maybe = length_buf[bytes_read] & 0x80 == 0;
+            tracing::debug!("Maybe value: {:08b}", length_buf[bytes_read]);
+            if maybe {
                 bytes_read += 1;
                 break;
             }
@@ -178,14 +216,36 @@ impl LoginHandler {
             }
         }
 
-        let packet_length = read_varint(&mut std::io::Cursor::new(&length_buf[..bytes_read]))? as usize;
+        // loop {
+        //     let n = self
+        //         .stream
+        //         .read(&mut length_buf[bytes_read..bytes_read + 1])
+        //         .await?;
+        //     if n == 0 {
+        //         return Err(anyhow!("Connection closed during login acknowledged"));
+        //     }
+        //
+        //     if length_buf[bytes_read] & 0x80 == 0 {
+        //         bytes_read += 1;
+        //         break;
+        //     }
+        //     bytes_read += 1;
+        //     if bytes_read >= 5 {
+        //         return Err(anyhow!("Packet length too long"));
+        //     }
+        // }
+
+        tracing::debug!("[LOGIN] Reading Login Acknowledged packet, length bytes read: {}", bytes_read);
+
+        let packet_length: usize =
+            read_varint(&mut std::io::Cursor::new(&length_buf[..bytes_read]))? as usize;
 
         // Read packet data
-        let mut packet_data = vec![0u8; packet_length];
+        let mut packet_data: Vec<u8> = vec![0u8; packet_length];
         self.stream.read_exact(&mut packet_data).await?;
 
         let mut reader = PacketReader::new(&packet_data);
-        let packet_id = reader.read_varint()?;
+        let packet_id: i32 = reader.read_varint()?;
 
         if packet_id != 0x03 {
             return Err(anyhow!("Expected Login Acknowledged packet (0x03), got {:#x}", packet_id));
@@ -200,16 +260,20 @@ impl LoginHandler {
 
         // Read packet length
         let mut bytes_read = 0;
-        loop {
-            let n = self
-                .stream
-                .read(&mut length_buf[bytes_read..bytes_read + 1])
-                .await?;
-            if n == 0 {
+
+        while let Ok(n_bytes) = self
+            .stream
+            .read(&mut length_buf[bytes_read..bytes_read + 1])
+            .await
+        {
+            if n_bytes == 0 {
+                // early return on closed connection
                 return Err(anyhow!("Connection closed during login start"));
             }
 
-            if length_buf[bytes_read] & 0x80 == 0 {
+            let maybe = length_buf[bytes_read] & 0x80 == 0;
+            tracing::debug!("Maybe value: {:08b}", length_buf[bytes_read]);
+            if maybe {
                 bytes_read += 1;
                 break;
             }
@@ -218,6 +282,25 @@ impl LoginHandler {
                 return Err(anyhow!("Packet length too long"));
             }
         }
+
+        // loop {
+        //     let n = self
+        //         .stream
+        //         .read(&mut length_buf[bytes_read..bytes_read + 1])
+        //         .await?;
+        //     if n == 0 {
+        //         return Err(anyhow!("Connection closed during login start"));
+        //     }
+        //
+        //     if length_buf[bytes_read] & 0x80 == 0 {
+        //         bytes_read += 1;
+        //         break;
+        //     }
+        //     bytes_read += 1;
+        //     if bytes_read >= 5 {
+        //         return Err(anyhow!("Packet length too long"));
+        //     }
+        // }
 
         let packet_length = read_varint(&mut std::io::Cursor::new(&length_buf[..bytes_read]))? as usize;
 
