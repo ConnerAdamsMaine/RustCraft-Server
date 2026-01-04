@@ -40,15 +40,18 @@ impl ConfigurationHandler {
     /// - Entries (Prefixed Array):
     ///   - Entry ID (Identifier): The entry name (e.g., "minecraft:overworld")
     ///   - Data (Prefixed Optional NBT): Entry data in NBT format (or null if from known packs)
+    /// 
+    /// LOCATION OF PROBLEM
+    /// FIND FIX
     async fn send_registry_data(stream: &mut TcpStream) -> Result<()> {
         // Send minimal required registries for basic functionality
         // For a full server, you'd need to send ALL synchronized registries
         let registries = vec![
-            ("minecraft:dimension_type", Self::get_dimension_type_registry()),
-            ("minecraft:damage_type", Self::get_damage_type_registry()),
+            ("minecraft:dimension_type", Self::get_dimension_type_registry()), // Problem child #1
+            ("minecraft:damage_type", Self::get_damage_type_registry()), // Problem child #2
         ];
 
-        for (registry_id, entries) in registries {
+        for (registry_id, entries) in registries { // Problem child #3
             Self::send_single_registry(stream, registry_id, &entries).await?;
         }
 
@@ -57,6 +60,8 @@ impl ConfigurationHandler {
     }
 
     /// Send a single Registry Data packet
+    /// 
+    /// Problem child #4
     async fn send_single_registry(
         stream: &mut TcpStream,
         registry_id: &str,
