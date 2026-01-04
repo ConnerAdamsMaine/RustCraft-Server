@@ -1,7 +1,7 @@
 use bytes::BytesMut;
 
 use crate::chunk::{BlockType, Chunk};
-use crate::protocol::PacketWriter;
+use crate::protocol::{ByteWritable, PacketWriter};
 
 /// Serialize a chunk into Minecraft protocol format (chunk data packet)
 /// This creates a basic chunk data packet that clients can render

@@ -69,61 +69,94 @@ impl Default for PacketWriter {
     }
 }
 
+pub trait ByteWritable {
+    fn write_varint<N: Into<i32>>(&mut self, value: N);
+
+    fn write_string<S: AsRef<str>>(&mut self, s: S);
+
+    fn write_byte<N: Into<u8>>(&mut self, value: N);
+
+    fn write_short<N: Into<i16>>(&mut self, value: N);
+
+    fn write_int<N: Into<i32>>(&mut self, value: N);
+
+    fn write_long<N: Into<i64>>(&mut self, value: N);
+
+    fn write_float<N: Into<f32>>(&mut self, value: N);
+
+    fn write_double<N: Into<f64>>(&mut self, value: N);
+
+    fn write_bool<B: Into<bool>>(&mut self, value: B);
+
+    // TODO: @check : check the constraints on how we want to do this -
+    //  May want something like: AsRef + AsBytes or something else
+    fn write_uuid<U: AsRef<Uuid>>(&mut self, uuid: U);
+
+    fn write_bytes<A>(&mut self, bytes: A)
+    where
+        A: AsRef<[u8]>;
+
+    fn finish(self) -> BytesMut;
+}
+
+impl ByteWritable for PacketWriter {
+    fn write_varint<N: Into<i32>>(&mut self, value: N) {
+        self.write_varint(value.into());
+    }
+
+    fn write_string<S: AsRef<str>>(&mut self, s: S) {
+        self.write_string(s.as_ref());
+    }
+
+    fn write_byte<N: Into<u8>>(&mut self, value: N) {
+        self.write_byte(value.into());
+    }
+
+    fn write_short<N: Into<i16>>(&mut self, value: N) {
+        self.write_short(value.into());
+    }
+
+    fn write_int<N: Into<i32>>(&mut self, value: N) {
+        self.write_int(value.into());
+    }
+
+    fn write_long<N: Into<i64>>(&mut self, value: N) {
+        self.write_long(value.into());
+    }
+
+    fn write_float<N: Into<f32>>(&mut self, value: N) {
+        self.write_float(value.into());
+    }
+
+    fn write_double<N: Into<f64>>(&mut self, value: N) {
+        self.write_double(value.into());
+    }
+
+    fn write_bool<B: Into<bool>>(&mut self, value: B) {
+        self.write_bool(value.into());
+    }
+
+    fn write_uuid<U: AsRef<Uuid>>(&mut self, uuid: U) {
+        self.write_uuid(uuid.as_ref());
+    }
+
+    fn write_bytes<A>(&mut self, bytes: A)
+    where
+        A: AsRef<[u8]>,
+    {
+        self.data.extend_from_slice(bytes.as_ref());
+    }
+
+    fn finish(self) -> BytesMut {
+        self.data
+    }
+}
+
 impl PacketWriter {
     pub fn new() -> Self {
         Self {
             data: BytesMut::new(),
         }
-    }
-
-    pub fn write_varint(&mut self, value: i32) {
-        self.data.extend_from_slice(&write_varint(value));
-    }
-
-    pub fn write_string(&mut self, s: &str) {
-        let bytes = s.as_bytes();
-        self.write_varint(bytes.len() as i32);
-        self.data.extend_from_slice(bytes);
-    }
-
-    pub fn write_byte(&mut self, value: u8) {
-        self.data.put_u8(value);
-    }
-
-    pub fn write_short(&mut self, value: i16) {
-        self.data.put_i16_le(value);
-    }
-
-    pub fn write_int(&mut self, value: i32) {
-        self.data.put_i32_le(value);
-    }
-
-    pub fn write_long(&mut self, value: i64) {
-        self.data.put_i64_le(value);
-    }
-
-    pub fn write_float(&mut self, value: f32) {
-        self.data.put_f32_le(value);
-    }
-
-    pub fn write_double(&mut self, value: f64) {
-        self.data.put_f64_le(value);
-    }
-
-    pub fn write_bool(&mut self, value: bool) {
-        self.data.put_u8(if value { 1 } else { 0 });
-    }
-
-    pub fn write_uuid(&mut self, uuid: &Uuid) {
-        self.data.extend_from_slice(uuid.as_bytes());
-    }
-
-    pub fn write_bytes(&mut self, bytes: &[u8]) {
-        self.data.extend_from_slice(bytes);
-    }
-
-    pub fn finish(self) -> BytesMut {
-        self.data
     }
 }
 

@@ -5,7 +5,7 @@ use tracing::warn;
 use uuid::Uuid;
 
 // use crate::packet_logger::PacketLogger;
-use crate::protocol::{write_varint, PacketWriter};
+use crate::protocol::{write_varint, ByteWritable, PacketWriter};
 
 pub struct JoinGameHandler;
 
