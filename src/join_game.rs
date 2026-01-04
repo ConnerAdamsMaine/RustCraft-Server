@@ -27,7 +27,7 @@ impl JoinGameHandler {
         Ok(())
     }
 
-    pub async fn send_disconnect(stream: &mut TcpStream, reason: &str) -> Result<()> {
+    pub async fn send_disconnect(stream: &mut TcpStream, reason: &str, packet_logger: &PacketLogger) -> Result<()> {
         let mut writer = PacketWriter::new();
 
         // Write JSON chat message
@@ -39,12 +39,15 @@ impl JoinGameHandler {
 
         let packet_data = writer.finish();
         let packet_id = write_varint(0x19); // Disconnect packet ID in Play state
+        let packet_length = (packet_id.len() + packet_data.len()) as i32;
 
         // Write packet: [length][id][data]
         let mut frame = Vec::new();
-        frame.extend_from_slice(&write_varint((packet_id.len() + packet_data.len()) as i32));
+        frame.extend_from_slice(&write_varint(packet_length));
         frame.extend_from_slice(&packet_id);
         frame.extend_from_slice(&packet_data);
+
+        let _ = packet_logger.log_server_packet(&frame);
 
         if let Err(e) = stream.write_all(&frame).await {
             warn!("Failed to send disconnect: {}", e);
