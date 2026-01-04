@@ -55,10 +55,18 @@ impl Player {
         _file_io_pool: Arc<FileIOThreadPool>,
         _network_pool: Arc<NetworkThreadPool>,
     ) -> Result<()> {
+        tracing::debug!("[PLAYER] Player handler starting");
+        
         // Handle login flow
+        tracing::debug!("[PLAYER] Creating LoginHandler");
         let mut login_handler = LoginHandler::new(self.socket);
+        
+        tracing::debug!("[PLAYER] Starting login flow");
         let player_login = match login_handler.handle_login().await {
-            Ok(login) => login,
+            Ok(login) => {
+                tracing::debug!("[PLAYER] Login successful");
+                login
+            },
             Err(e) => {
                 tracing::error!("[LOGIN] Authentication failed: {}", e);
                 let key = ErrorKey::new("LOGIN", format!("auth_failed: {}", e));
@@ -67,10 +75,12 @@ impl Player {
             }
         };
         
+        tracing::debug!("[PLAYER] Extracting login info");
         self.uuid = player_login.uuid;
         self.username = player_login.username.clone();
         self.socket = login_handler.get_stream();
         self.state = PlayerState::Play;
+        tracing::debug!("[PLAYER] Player state set to Play");
 
         tracing::info!(
             "[PLAYER] '{}' ({}) joined at ({}, {}, {})",
@@ -81,21 +91,35 @@ impl Player {
             self.z
         );
 
+        // Send configuration finish packet to transition to Play state
+        tracing::debug!("[PLAYER] Sending Configuration Finish packet");
+        if let Err(e) = JoinGameHandler::send_configuration_finish(&mut self.socket).await {
+            tracing::error!("[PLAYER] Failed to send config finish to {}: {}", self.username, e);
+            let key = ErrorKey::new("CONFIG", "finish_failed");
+            error_tracker.record_error(key);
+            return Err(e);
+        }
+        tracing::debug!("[PLAYER] Configuration Finish sent");
+
         // Send join game packet
+        tracing::debug!("[PLAYER] Sending Join Game packet");
         if let Err(e) = JoinGameHandler::send_join_game(&mut self.socket, 1, &self.username).await {
             tracing::error!("[PLAYER] Failed to send join game packet to {}: {}", self.username, e);
             let key = ErrorKey::new("JOIN_GAME", "send_failed");
             error_tracker.record_error(key);
             return Err(e);
         }
+        tracing::debug!("[PLAYER] Join Game sent");
 
         // Send player info add packet
+        tracing::debug!("[PLAYER] Sending Player Info Add packet");
         if let Err(e) = JoinGameHandler::send_player_info_add(&mut self.socket, self.uuid, &self.username).await {
             tracing::error!("[PLAYER] Failed to send player info to {}: {}", self.username, e);
             let key = ErrorKey::new("PLAYER_INFO", "send_failed");
             error_tracker.record_error(key);
             return Err(e);
         }
+        tracing::debug!("[PLAYER] Player Info Add sent");
 
         // TODO: Load initial chunks around player and send to client
         // Currently disabled - chunk serialization needs fixing for 1.21.7 protocol
@@ -109,16 +133,20 @@ impl Player {
         //     }
         // }
 
-        tracing::debug!("[PLAYER] {} ready to play", self.username);
+        tracing::info!("[PLAYER] {} ready to play at ({}, {}, {})", self.username, self.x, self.y, self.z);
+        tracing::debug!("[PLAYER] Starting main game loop");
 
         // Main game loop for this player
         loop {
             // Try to read incoming packets from client
             {
                 let socket = &mut self.socket;
-                if let Err(e) = Self::handle_incoming_packets_static(socket, &mut self.x, &mut self.y, &mut self.z).await {
-                    tracing::error!("[PLAYER] {} packet read error: {}", self.username, e);
-                    return Err(e);
+                match Self::handle_incoming_packets_static(socket, &mut self.x, &mut self.y, &mut self.z).await {
+                    Ok(_) => {},
+                    Err(e) => {
+                        tracing::error!("[PLAYER] {} packet read error: {}", self.username, e);
+                        return Err(e);
+                    }
                 }
             }
 
@@ -192,25 +220,38 @@ impl Player {
         
         if n == 0 {
             // Client disconnected
+            tracing::warn!("[PACKET] Client disconnected (read 0 bytes)");
             return Err(anyhow::anyhow!("Client disconnected"));
         }
+
+        tracing::trace!("[PACKET] Read {} bytes for packet header", n);
 
         // Parse varint length
         let mut cursor = Cursor::new(&length_bytes[..n]);
         let packet_length = match read_varint(&mut cursor) {
-            Ok(len) => len as usize,
-            Err(_) => return Ok(()), // Incomplete packet, try again later
+            Ok(len) => {
+                tracing::trace!("[PACKET] Packet length: {}", len);
+                len as usize
+            },
+            Err(e) => {
+                tracing::trace!("[PACKET] Could not parse varint: {}, trying again later", e);
+                return Ok(()); // Incomplete packet, try again later
+            }
         };
 
         // Read packet data
         let mut packet_data = vec![0u8; packet_length];
         match socket.read_exact(&mut packet_data).await {
             Ok(_) => {
+                tracing::trace!("[PACKET] Read packet data ({} bytes)", packet_length);
+                
                 // Parse packet ID
                 let mut cursor = Cursor::new(&packet_data[..]);
                 if let Ok(packet_id) = read_varint(&mut cursor) {
                     let pos = cursor.position() as usize;
                     let payload = &packet_data[pos..];
+
+                    tracing::trace!("[PACKET] Packet ID: 0x{:02x}, payload: {} bytes", packet_id, payload.len());
 
                     // Handle movement packets
                     if let Ok(Some(movement)) = movement_handler::parse_movement_packet(packet_id, payload) {

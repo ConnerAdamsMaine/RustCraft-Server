@@ -27,17 +27,21 @@ impl LoginHandler {
     }
 
     pub async fn handle_login(&mut self) -> Result<PlayerLogin> {
+        tracing::debug!("[LOGIN] Starting login flow");
+        
         // Read Handshake packet
+        tracing::debug!("[LOGIN] Waiting for Handshake packet...");
         if let Err(e) = self.read_handshake().await {
-            warn!("Handshake failed: {}", e);
+            warn!("[LOGIN] Handshake failed: {}", e);
             self.send_disconnect("Invalid handshake").await.ok();
             return Err(e);
         }
+        tracing::debug!("[LOGIN] Handshake received, protocol version: {}", self.protocol_version);
 
         // Validate protocol version
         if self.protocol_version != VALID_PROTOCOL_VERSION {
             warn!(
-                "Invalid protocol version: {} (expected {})",
+                "[LOGIN] Invalid protocol version: {} (expected {})",
                 self.protocol_version, VALID_PROTOCOL_VERSION
             );
             self.send_disconnect("Outdated server! Please use 1.21.7")
@@ -49,12 +53,17 @@ impl LoginHandler {
                 VALID_PROTOCOL_VERSION
             ));
         }
+        tracing::debug!("[LOGIN] Protocol version validated");
 
         // Read Login Start packet
+        tracing::debug!("[LOGIN] Waiting for Login Start packet...");
         let username = match self.read_login_start().await {
-            Ok(name) => name,
+            Ok(name) => {
+                tracing::debug!("[LOGIN] Login Start received, username: {}", name);
+                name
+            },
             Err(e) => {
-                warn!("Login start failed: {}", e);
+                warn!("[LOGIN] Login start failed: {}", e);
                 self.send_disconnect("Invalid username").await.ok();
                 return Err(e);
             }
@@ -62,34 +71,31 @@ impl LoginHandler {
 
         // Validate username
         if !Self::is_valid_username(&username) {
-            warn!("Invalid username: {}", username);
+            warn!("[LOGIN] Invalid username: {}", username);
             self.send_disconnect("Invalid username").await.ok();
             return Err(anyhow!("Invalid username: {}", username));
         }
+        tracing::debug!("[LOGIN] Username validated: {}", username);
 
         // Generate UUID for offline mode
         let uuid = Self::generate_offline_uuid(&username);
+        tracing::debug!("[LOGIN] Generated UUID: {}", uuid);
 
         // Send Login Success packet
+        tracing::debug!("[LOGIN] Sending Login Success packet...");
         if let Err(e) = self.send_login_success(&username, &uuid).await {
-            warn!("Failed to send login success: {}", e);
+            warn!("[LOGIN] Failed to send login success: {}", e);
             return Err(e);
         }
+        tracing::debug!("[LOGIN] Login Success sent");
 
-        info!("Player '{}' (UUID: {}) logged in successfully", username, uuid);
+        info!("[LOGIN] Player '{}' (UUID: {}) logged in successfully", username, uuid);
 
-        // For 1.21.7+, read Login Acknowledged packet (0x03)
-        if let Err(e) = self.read_login_acknowledged().await {
-            warn!("Failed to read login acknowledged: {}", e);
-            // Don't fail completely - some clients might skip it
-        }
-
-        // Send Configuration Finish to transition to Play state
-        if let Err(e) = self.send_config_finish().await {
-            warn!("Failed to send config finish: {}", e);
-            return Err(e);
-        }
-
+        // For 1.21.7+: Give client moment to send Login Acknowledged, but don't wait for it
+        // The client will transition to Configuration state after Login Success
+        // We'll skip the full configuration flow for now
+        tracing::debug!("[LOGIN] Login flow complete, returning to server");
+        
         Ok(PlayerLogin { username, uuid })
     }
 
@@ -246,59 +252,6 @@ impl LoginHandler {
         frame.extend_from_slice(&write_varint((packet_id.len() + packet_data.len()) as i32));
         frame.extend_from_slice(&packet_id);
         frame.extend_from_slice(&packet_data);
-
-        self.stream.write_all(&frame).await?;
-        self.stream.flush().await?;
-
-        Ok(())
-    }
-
-    async fn read_login_acknowledged(&mut self) -> Result<()> {
-        let mut length_buf = [0u8; 5];
-        
-        // Read packet length
-        let mut bytes_read = 0;
-        loop {
-            let n = self.stream.read(&mut length_buf[bytes_read..bytes_read + 1]).await?;
-            if n == 0 {
-                return Err(anyhow!("Connection closed"));
-            }
-            
-            if length_buf[bytes_read] & 0x80 == 0 {
-                bytes_read += 1;
-                break;
-            }
-            bytes_read += 1;
-            if bytes_read >= 5 {
-                return Err(anyhow!("Packet length too long"));
-            }
-        }
-
-        let packet_length = read_varint(&mut std::io::Cursor::new(&length_buf[..bytes_read]))? as usize;
-        
-        // Read packet data
-        let mut packet_data = vec![0u8; packet_length];
-        self.stream.read_exact(&mut packet_data).await?;
-
-        let mut reader = PacketReader::new(&packet_data);
-        let packet_id = reader.read_varint()?;
-
-        // Packet 0x03 is Login Acknowledged in 1.21.7
-        if packet_id != 0x03 {
-            warn!("Expected Login Acknowledged packet (0x03), got {:#x}", packet_id);
-        }
-
-        Ok(())
-    }
-
-    async fn send_config_finish(&mut self) -> Result<()> {
-        // Configuration Finish packet (0x02) - transitions to Play state
-        // This packet has no data, just the ID
-        let packet_id = write_varint(0x02);
-        
-        let mut frame = Vec::new();
-        frame.extend_from_slice(&write_varint(packet_id.len() as i32));
-        frame.extend_from_slice(&packet_id);
 
         self.stream.write_all(&frame).await?;
         self.stream.flush().await?;

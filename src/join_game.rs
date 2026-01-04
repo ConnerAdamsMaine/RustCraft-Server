@@ -8,6 +8,21 @@ use tracing::warn;
 pub struct JoinGameHandler;
 
 impl JoinGameHandler {
+    pub async fn send_configuration_finish(stream: &mut TcpStream) -> Result<()> {
+        // Configuration Finish packet (0x02) - transitions from Configuration to Play state
+        // This packet has no data, just the ID
+        let packet_id = write_varint(0x02);
+        
+        let mut frame = Vec::new();
+        frame.extend_from_slice(&write_varint(packet_id.len() as i32));
+        frame.extend_from_slice(&packet_id);
+
+        stream.write_all(&frame).await?;
+        stream.flush().await?;
+
+        Ok(())
+    }
+
     pub async fn send_disconnect(stream: &mut TcpStream, reason: &str) -> Result<()> {
         let mut writer = PacketWriter::new();
 
