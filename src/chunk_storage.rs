@@ -29,7 +29,7 @@ pub struct ChunkStorage {
 }
 
 impl ChunkStorage {
-    pub fn new(chunk_generator: Arc<ChunkGenerator>) -> Result<Self> {
+    pub fn new(chunk_generator: Arc<ChunkGenerator>, chunk_gen_pool: Arc<ChunkGenThreadPool>) -> Result<Self> {
         let world_dir = PathBuf::from(WORLD_DIR);
 
         // Create world directory if it doesn't exist
@@ -41,8 +41,6 @@ impl ChunkStorage {
             "[STARTUP] Initializing chunk cache: {}-{}MB ({}-{} chunks)",
             INITIAL_BUFFER_MB, MAX_BUFFER_MB, INITIAL_CAPACITY, MAX_CAPACITY
         );
-
-        let chunk_gen_pool = Arc::new(ChunkGenThreadPool::new());
 
         let storage = Self {
             cache: Arc::new(RwLock::new(LruCache::with_growth(

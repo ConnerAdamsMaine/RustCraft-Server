@@ -25,13 +25,14 @@ impl MinecraftServer {
         let listener = TcpListener::bind(addr).await?;
         info!("[STARTUP] Server listening on {}", addr);
 
-        let chunk_gen = Arc::new(ChunkGenerator::new(12345));
-        let chunk_storage = ChunkStorage::new(chunk_gen)?;
-
-        // Initialize thread pools
+        // Initialize thread pools first
         let chunk_gen_pool = Arc::new(ChunkGenThreadPool::new());
         let file_io_pool = Arc::new(FileIOThreadPool::new());
         let network_pool = Arc::new(NetworkThreadPool::new());
+
+        // Create chunk generator and storage with the pool
+        let chunk_gen = Arc::new(ChunkGenerator::new(12345));
+        let chunk_storage = ChunkStorage::new(chunk_gen, chunk_gen_pool.clone())?;
 
         Ok(Self {
             listener,
