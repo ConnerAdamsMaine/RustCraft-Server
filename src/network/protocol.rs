@@ -298,7 +298,7 @@ impl NBTBuilder {
         bytes.put_u8(0x0A);
 
         // Root compound name (empty)
-        bytes.put_i16(0);
+        bytes.extend_from_slice(&(0i16).to_be_bytes());
 
         // bed_works: TAG_Byte = 1
         bytes.put_u8(0x01); // TAG_Byte
@@ -327,17 +327,17 @@ impl NBTBuilder {
         // height: TAG_Int
         bytes.put_u8(0x03);
         bytes.extend_from_slice(b"\x00\x06height");
-        bytes.put_i32(height);
+        bytes.extend_from_slice(&height.to_be_bytes());
 
         // logical_height: TAG_Int
         bytes.put_u8(0x03);
         bytes.extend_from_slice(b"\x00\x0elogical_height");
-        bytes.put_i32(height);
+        bytes.extend_from_slice(&height.to_be_bytes());
 
         // min_y: TAG_Int
         bytes.put_u8(0x03);
         bytes.extend_from_slice(b"\x00\x05min_y");
-        bytes.put_i32(min_y);
+        bytes.extend_from_slice(&min_y.to_be_bytes());
 
         // ultrawarm: TAG_Byte
         bytes.put_u8(0x01);
@@ -352,7 +352,7 @@ impl NBTBuilder {
         // coordinate_scale: TAG_Float
         bytes.put_u8(0x05);
         bytes.extend_from_slice(b"\x00\x10coordinate_scale");
-        bytes.put_f32(coordinate_scale);
+        bytes.extend_from_slice(&coordinate_scale.to_be_bytes());
 
         // piglin_safe: TAG_Byte
         bytes.put_u8(0x01);
