@@ -1,5 +1,3 @@
-use std::sync::LazyLock;
-
 use anyhow::Result;
 use rustcraft::core::server::MinecraftServer;
 use rustcraft::error_tracker::ErrorTracker;
@@ -8,8 +6,8 @@ use rustcraft::error_tracker::ErrorTracker;
 use crate::sdk::PacketLogger;
 
 #[cfg(feature = "dev-sdk")]
-pub static LOGGER: LazyLock<PacketLogger> =
-    LazyLock::new(|| PacketLogger::new().expect("Failed to initialize PacketLogger"));
+pub static LOGGER: std::sync::LazyLock<PacketLogger> =
+    std::sync::LazyLock::new(|| PacketLogger::new().expect("Failed to initialize PacketLogger"));
 
 #[tokio::main]
 async fn main() -> Result<()> {
