@@ -93,23 +93,23 @@ impl PacketWriter {
     }
 
     pub fn write_short(&mut self, value: i16) {
-        self.data.put_i16(value);
+        self.data.put_i16_le(value);
     }
 
     pub fn write_int(&mut self, value: i32) {
-        self.data.put_i32(value);
+        self.data.put_i32_le(value);
     }
 
     pub fn write_long(&mut self, value: i64) {
-        self.data.put_i64(value);
+        self.data.put_i64_le(value);
     }
 
     pub fn write_float(&mut self, value: f32) {
-        self.data.put_f32(value);
+        self.data.put_f32_le(value);
     }
 
     pub fn write_double(&mut self, value: f64) {
-        self.data.put_f64(value);
+        self.data.put_f64_le(value);
     }
 
     pub fn write_bool(&mut self, value: bool) {
@@ -160,31 +160,31 @@ impl<'a> PacketReader<'a> {
     pub fn read_short(&mut self) -> std::io::Result<i16> {
         let mut buf = [0u8; 2];
         self.cursor.read_exact(&mut buf)?;
-        Ok(i16::from_be_bytes(buf))
+        Ok(i16::from_le_bytes(buf))
     }
 
     pub fn read_int(&mut self) -> std::io::Result<i32> {
         let mut buf = [0u8; 4];
         self.cursor.read_exact(&mut buf)?;
-        Ok(i32::from_be_bytes(buf))
+        Ok(i32::from_le_bytes(buf))
     }
 
     pub fn read_long(&mut self) -> std::io::Result<i64> {
         let mut buf = [0u8; 8];
         self.cursor.read_exact(&mut buf)?;
-        Ok(i64::from_be_bytes(buf))
+        Ok(i64::from_le_bytes(buf))
     }
 
     pub fn read_float(&mut self) -> std::io::Result<f32> {
         let mut buf = [0u8; 4];
         self.cursor.read_exact(&mut buf)?;
-        Ok(f32::from_be_bytes(buf))
+        Ok(f32::from_le_bytes(buf))
     }
 
     pub fn read_double(&mut self) -> std::io::Result<f64> {
         let mut buf = [0u8; 8];
         self.cursor.read_exact(&mut buf)?;
-        Ok(f64::from_be_bytes(buf))
+        Ok(f64::from_le_bytes(buf))
     }
 
     pub fn read_bool(&mut self) -> std::io::Result<bool> {

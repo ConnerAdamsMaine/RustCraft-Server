@@ -1,5 +1,6 @@
 use std::sync::Arc;
 use std::sync::mpsc::{channel, Sender};
+use std::sync::{Mutex, Condvar};
 use std::thread;
 use std::marker::PhantomData;
 use anyhow::Result;
@@ -85,17 +86,23 @@ where
 }
 
 /// Thread pool specifically for chunk generation (4 threads)
+#[derive(Clone)]
 pub struct ChunkGenThreadPool {
-    pool: ThreadPool<ChunkGenTask>,
+    pool: Arc<ThreadPool<ChunkGenTask>>,
+    init_state: Arc<(Mutex<bool>, Condvar)>,
 }
 
 pub struct ChunkGenTask;
 
 impl ChunkGenThreadPool {
     pub fn new() -> Self {
-        let pool = ThreadPool::new(4, "ChunkGen");
+        let pool = Arc::new(ThreadPool::new(4, "ChunkGen"));
         info!("[STARTUP] Chunk generation thread pool created with 4 workers");
-        Self { pool }
+        let init_state = Arc::new((Mutex::new(false), Condvar::new()));
+        Self { 
+            pool, 
+            init_state,
+        }
     }
 
     pub fn execute<F>(&self, f: F) -> Result<()>
@@ -103,6 +110,21 @@ impl ChunkGenThreadPool {
         F: FnOnce() + Send + 'static,
     {
         self.pool.execute(f)
+    }
+    
+    pub fn signal_init_complete(&self) {
+        let (lock, condvar) = &*self.init_state;
+        let mut done = lock.lock().unwrap();
+        *done = true;
+        condvar.notify_all();
+    }
+    
+    pub fn wait_for_init_complete(&self) {
+        let (lock, condvar) = &*self.init_state;
+        let mut done = lock.lock().unwrap();
+        while !*done {
+            done = condvar.wait(done).unwrap();
+        }
     }
 }
 

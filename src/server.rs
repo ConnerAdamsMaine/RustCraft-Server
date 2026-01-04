@@ -2,6 +2,7 @@ use anyhow::Result;
 use tokio::net::{TcpListener, TcpStream};
 use tracing::{error, info};
 use std::sync::Arc;
+use std::path::Path;
 
 use crate::player::Player;
 use crate::game_loop::GameLoop;
@@ -55,6 +56,31 @@ impl MinecraftServer {
 
         // Start hit count reset task (runs every 5 minutes)
         self.chunk_storage.start_hit_reset_task();
+
+        // Check if world directory exists, if not generate initial chunks
+        let world_path = "./world";
+        if !Path::new(world_path).exists() {
+            info!("[STARTUP] World directory does not exist, generating initial 64x64 chunks...");
+            let chunk_gen_pool_clone = chunk_gen_pool.clone();
+            let chunk_storage_clone = chunk_storage.clone();
+            
+            tokio::spawn(async move {
+                // Generate 64x64 chunk grid around origin
+                for x in -32..32 {
+                    for z in -32..32 {
+                        let chunk_pos = crate::chunk::ChunkPos::new(x, z);
+                        // Queue chunk generation through the chunk storage
+                        let _ = chunk_storage_clone.get_chunk(chunk_pos);
+                    }
+                }
+                info!("[STARTUP] Initial chunk generation queued, waiting for completion...");
+                // Signal that initialization is complete
+                chunk_gen_pool_clone.signal_init_complete();
+            });
+        } else {
+            // World exists, signal init complete immediately
+            self.chunk_gen_pool.signal_init_complete();
+        }
 
         // Spawn game loop task (main thread for game loop and logging)
         tokio::spawn(async move {

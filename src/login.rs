@@ -193,11 +193,19 @@ impl LoginHandler {
     async fn send_login_success(&mut self, username: &str, uuid: &Uuid) -> Result<()> {
         let mut writer = PacketWriter::new();
         
+        // Game Profile structure:
+        // - UUID
+        // - Username
+        // - Properties (array of {name, value, signature})
+        
         // Write UUID
         writer.write_uuid(uuid);
         
         // Write username
         writer.write_string(username);
+        
+        // Write properties count (empty array)
+        writer.write_varint(0);
 
         let packet_data = writer.finish();
         let packet_id = write_varint(0x02);

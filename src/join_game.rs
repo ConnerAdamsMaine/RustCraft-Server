@@ -12,9 +12,10 @@ impl JoinGameHandler {
         // Configuration Finish packet (0x02) - transitions from Configuration to Play state
         // This packet has no data, just the ID
         let packet_id = write_varint(0x02);
+        let packet_length = packet_id.len() as i32;
         
         let mut frame = Vec::new();
-        frame.extend_from_slice(&write_varint(packet_id.len() as i32));
+        frame.extend_from_slice(&write_varint(packet_length));
         frame.extend_from_slice(&packet_id);
 
         stream.write_all(&frame).await?;
@@ -105,10 +106,11 @@ impl JoinGameHandler {
 
         let packet_data = writer.finish();
         let packet_id = write_varint(0x28);
+        let packet_length = (packet_id.len() + packet_data.len()) as i32;
 
         // Write packet: [length][id][data]
         let mut frame = Vec::new();
-        frame.extend_from_slice(&write_varint((packet_id.len() + packet_data.len()) as i32));
+        frame.extend_from_slice(&write_varint(packet_length));
         frame.extend_from_slice(&packet_id);
         frame.extend_from_slice(&packet_data);
 
@@ -147,10 +149,11 @@ impl JoinGameHandler {
 
         let packet_data = writer.finish();
         let packet_id = write_varint(0x53);
+        let packet_length = (packet_id.len() + packet_data.len()) as i32;
 
         // Write packet: [length][id][data]
         let mut frame = Vec::new();
-        frame.extend_from_slice(&write_varint((packet_id.len() + packet_data.len()) as i32));
+        frame.extend_from_slice(&write_varint(packet_length));
         frame.extend_from_slice(&packet_id);
         frame.extend_from_slice(&packet_data);
 

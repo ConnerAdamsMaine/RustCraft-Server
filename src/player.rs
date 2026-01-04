@@ -51,11 +51,19 @@ impl Player {
         mut self,
         chunk_storage: ChunkStorage,
         error_tracker: Arc<ErrorTracker>,
-        _chunk_gen_pool: Arc<ChunkGenThreadPool>,
+        chunk_gen_pool: Arc<ChunkGenThreadPool>,
         _file_io_pool: Arc<FileIOThreadPool>,
         _network_pool: Arc<NetworkThreadPool>,
     ) -> Result<()> {
         tracing::debug!("[PLAYER] Player handler starting");
+        
+        // Wait for world initialization to complete (in blocking task to not block async runtime)
+        tracing::debug!("[PLAYER] Waiting for world initialization...");
+        let chunk_gen_pool_clone = chunk_gen_pool.clone();
+        tokio::task::spawn_blocking(move || {
+            chunk_gen_pool_clone.wait_for_init_complete();
+            tracing::info!("[PLAYER] World initialization complete, accepting players");
+        }).await?;
         
         // Handle login flow
         tracing::debug!("[PLAYER] Creating LoginHandler");
@@ -277,6 +285,11 @@ impl Player {
             }
             Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                 // No data available, try again later
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
+                // Client disconnected gracefully
+                tracing::debug!("[PACKET] Client disconnected (unexpected EOF)");
+                return Err(anyhow::anyhow!("Client disconnected"));
             }
             Err(e) => return Err(e.into()),
         }
