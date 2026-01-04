@@ -92,58 +92,55 @@ pub trait ByteWritable {
     //  May want something like: AsRef + AsBytes or something else
     fn write_uuid<U: AsRef<Uuid>>(&mut self, uuid: U);
 
-    fn write_bytes<A>(&mut self, bytes: A)
-    where
-        A: AsRef<[u8]>;
+    fn write_bytes<A: AsRef<[u8]>>(&mut self, bytes: A);
 
     fn finish(self) -> BytesMut;
 }
 
 impl ByteWritable for PacketWriter {
     fn write_varint<N: Into<i32>>(&mut self, value: N) {
-        self.write_varint(value.into());
+        self.data.extend_from_slice(&write_varint(value.into()))
     }
 
     fn write_string<S: AsRef<str>>(&mut self, s: S) {
-        self.write_string(s.as_ref());
+        let bytes = s.as_ref().as_bytes();
+        self.write_varint(bytes.len() as i32);
+        self.data.extend_from_slice(bytes);
     }
 
     fn write_byte<N: Into<u8>>(&mut self, value: N) {
-        self.write_byte(value.into());
+        self.data.put_u8(value.into());
     }
 
     fn write_short<N: Into<i16>>(&mut self, value: N) {
-        self.write_short(value.into());
+        self.data.put_i16_le(value.into());
     }
 
     fn write_int<N: Into<i32>>(&mut self, value: N) {
-        self.write_int(value.into());
+        self.data.put_i32_le(value.into());
     }
 
     fn write_long<N: Into<i64>>(&mut self, value: N) {
-        self.write_long(value.into());
+        self.data.put_i64_le(value.into());
     }
 
     fn write_float<N: Into<f32>>(&mut self, value: N) {
-        self.write_float(value.into());
+        self.data.put_f32_le(value.into());
     }
 
     fn write_double<N: Into<f64>>(&mut self, value: N) {
-        self.write_double(value.into());
+        self.data.put_f64_le(value.into());
     }
 
     fn write_bool<B: Into<bool>>(&mut self, value: B) {
-        self.write_bool(value.into());
+        self.data.put_u8(if value.into() { 1 } else { 0 });
     }
 
     fn write_uuid<U: AsRef<Uuid>>(&mut self, uuid: U) {
-        self.write_uuid(uuid.as_ref());
+        self.data.extend_from_slice(uuid.as_ref().as_bytes());
     }
 
-    fn write_bytes<A>(&mut self, bytes: A)
-    where
-        A: AsRef<[u8]>,
-    {
+    fn write_bytes<A: AsRef<[u8]>>(&mut self, bytes: A) {
         self.data.extend_from_slice(bytes.as_ref());
     }
 
