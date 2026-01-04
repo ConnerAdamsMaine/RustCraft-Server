@@ -1,14 +1,16 @@
+use std::fs;
+use std::path::PathBuf;
+use std::sync::{mpsc, Arc};
+
+use anyhow::Result;
+use parking_lot::RwLock;
+use tracing::{debug, info, warn};
+
 use crate::cache::LruCache;
 use crate::chunk::{Chunk, ChunkPos};
 use crate::chunk_generator::ChunkGenerator;
 use crate::region::{Region, RegionPos};
 use crate::thread_pool::ChunkGenThreadPool;
-use anyhow::Result;
-use parking_lot::RwLock;
-use std::fs;
-use std::path::PathBuf;
-use std::sync::{Arc, mpsc};
-use tracing::{debug, info, warn};
 
 const WORLD_DIR: &str = "world";
 
@@ -21,15 +23,18 @@ const INITIAL_CAPACITY: usize = INITIAL_BUFFER_MB * 1024 * 1024 / CHUNK_SIZE_BYT
 const MAX_CAPACITY: usize = MAX_BUFFER_MB * 1024 * 1024 / CHUNK_SIZE_BYTES; // ~9033 chunks
 
 pub struct ChunkStorage {
-    cache: Arc<RwLock<LruCache<ChunkPos, Chunk>>>,
-    world_dir: PathBuf,
+    cache:           Arc<RwLock<LruCache<ChunkPos, Chunk>>>,
+    world_dir:       PathBuf,
     chunk_generator: Arc<ChunkGenerator>,
-    evictions: Arc<RwLock<usize>>,
-    chunk_gen_pool: Arc<ChunkGenThreadPool>,
+    evictions:       Arc<RwLock<usize>>,
+    chunk_gen_pool:  Arc<ChunkGenThreadPool>,
 }
 
 impl ChunkStorage {
-    pub fn new(chunk_generator: Arc<ChunkGenerator>, chunk_gen_pool: Arc<ChunkGenThreadPool>) -> Result<Self> {
+    pub fn new(
+        chunk_generator: Arc<ChunkGenerator>,
+        chunk_gen_pool: Arc<ChunkGenThreadPool>,
+    ) -> Result<Self> {
         let world_dir = PathBuf::from(WORLD_DIR);
 
         // Create world directory if it doesn't exist
@@ -140,10 +145,7 @@ impl ChunkStorage {
 
             if expanded {
                 let cache = self.cache.read();
-                debug!(
-                    "[CHUNK] Cache expanded to {} chunks during pregeneration",
-                    cache.current_capacity()
-                );
+                debug!("[CHUNK] Cache expanded to {} chunks during pregeneration", cache.current_capacity());
             }
 
             if let Some(evicted_pos) = evicted {
@@ -163,10 +165,7 @@ impl ChunkStorage {
 
             if expanded {
                 let cache = self.cache.read();
-                debug!(
-                    "[CHUNK] Cache expanded to {} chunks during pregeneration",
-                    cache.current_capacity()
-                );
+                debug!("[CHUNK] Cache expanded to {} chunks during pregeneration", cache.current_capacity());
             }
 
             if let Some(evicted_pos) = evicted {
@@ -213,20 +212,13 @@ impl ChunkStorage {
             let usage = cache.usage_ratio();
             let capacity = cache.current_capacity();
             drop(cache);
-            info!(
-                "[CHUNK] Cache expanded to {} chunks ({:.1}% usage)",
-                capacity,
-                usage * 100.0
-            );
+            info!("[CHUNK] Cache expanded to {} chunks ({:.1}% usage)", capacity, usage * 100.0);
         }
 
         if let Some(evicted_pos) = evicted_key {
             let mut evictions = self.evictions.write();
             *evictions += 1;
-            warn!(
-                "[CHUNK] Evicted low-hit chunk {} (total evictions: {})",
-                evicted_pos, *evictions
-            );
+            warn!("[CHUNK] Evicted low-hit chunk {} (total evictions: {})", evicted_pos, *evictions);
         }
 
         // If cache is getting full, flush to disk
@@ -242,10 +234,7 @@ impl ChunkStorage {
     pub fn flush_cache(&self) -> Result<()> {
         let cache = self.cache.write();
 
-        let chunks_to_save: Vec<Chunk> = cache
-            .iter()
-            .map(|(_, chunk)| chunk.clone())
-            .collect();
+        let chunks_to_save: Vec<Chunk> = cache.iter().map(|(_, chunk)| chunk.clone()).collect();
 
         drop(cache);
 
@@ -300,11 +289,7 @@ impl ChunkStorage {
         let serialized = region.serialize();
         fs::write(&region_path, serialized)?;
 
-        debug!(
-            "Saved chunk {:?} to {}",
-            chunk.pos,
-            region_path.display()
-        );
+        debug!("Saved chunk {:?} to {}", chunk.pos, region_path.display());
 
         Ok(())
     }
@@ -323,11 +308,11 @@ impl ChunkStorage {
 impl Clone for ChunkStorage {
     fn clone(&self) -> Self {
         Self {
-            cache: self.cache.clone(),
-            world_dir: self.world_dir.clone(),
+            cache:           self.cache.clone(),
+            world_dir:       self.world_dir.clone(),
             chunk_generator: self.chunk_generator.clone(),
-            evictions: self.evictions.clone(),
-            chunk_gen_pool: self.chunk_gen_pool.clone(),
+            evictions:       self.evictions.clone(),
+            chunk_gen_pool:  self.chunk_gen_pool.clone(),
         }
     }
 }

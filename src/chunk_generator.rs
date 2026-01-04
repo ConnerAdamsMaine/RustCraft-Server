@@ -1,12 +1,14 @@
-use crate::chunk::{Chunk, ChunkPos, BlockType};
-use crate::terrain_gen::{HeightMap, BiomeMap, Biome};
 use std::sync::Arc;
+
 use parking_lot::RwLock;
 
+use crate::chunk::{BlockType, Chunk, ChunkPos};
+use crate::terrain_gen::{Biome, BiomeMap, HeightMap};
+
 pub struct ChunkGenerator {
-    seed: u64,
+    seed:       u64,
     height_map: Arc<RwLock<Option<HeightMap>>>,
-    biome_map: Arc<RwLock<Option<BiomeMap>>>,
+    biome_map:  Arc<RwLock<Option<BiomeMap>>>,
 }
 
 impl ChunkGenerator {
@@ -68,7 +70,15 @@ impl ChunkGenerator {
         ((normalized * 190.0) + 10.0) as usize
     }
 
-    fn fill_column(&self, chunk: &mut Chunk, x: usize, z: usize, height: usize, biome: Biome, elevation: f64) {
+    fn fill_column(
+        &self,
+        chunk: &mut Chunk,
+        x: usize,
+        z: usize,
+        height: usize,
+        biome: Biome,
+        elevation: f64,
+    ) {
         for y in 0..height.min(256) {
             let block = self.get_block_for_biome(y, height, biome, elevation);
             chunk.set_block(x, y, z, block);

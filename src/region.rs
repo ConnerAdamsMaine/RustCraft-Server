@@ -1,6 +1,7 @@
-use crate::chunk::{Chunk, ChunkPos, BlockType};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+
+use crate::chunk::{BlockType, Chunk, ChunkPos};
 
 const REGION_SIZE: i32 = 32;
 const MAX_CHUNKS: i32 = 10240;
@@ -28,10 +29,7 @@ impl RegionPos {
     }
 
     pub fn max_chunk(&self) -> (i32, i32) {
-        (
-            (self.x + 1) * REGION_SIZE - 1,
-            (self.z + 1) * REGION_SIZE - 1,
-        )
+        ((self.x + 1) * REGION_SIZE - 1, (self.z + 1) * REGION_SIZE - 1)
     }
 
     pub fn chunk_offset(&self, chunk_x: i32, chunk_z: i32) -> Option<usize> {
@@ -56,21 +54,18 @@ impl RegionPos {
         // Allow negative coordinates - world is centered at origin
         let (min_x, min_z) = self.min_chunk();
         let (max_x, max_z) = self.max_chunk();
-        
+
         let half_world = MAX_CHUNKS / 2;
         let neg_bound = -(half_world as i32);
         let pos_bound = half_world as i32;
-        
-        min_x >= neg_bound
-            && min_z >= neg_bound
-            && max_x < pos_bound
-            && max_z < pos_bound
+
+        min_x >= neg_bound && min_z >= neg_bound && max_x < pos_bound && max_z < pos_bound
     }
 }
 
 #[derive(Serialize, Deserialize)]
 pub struct SerializedChunk {
-    pub pos: (i32, i32),
+    pub pos:    (i32, i32),
     pub blocks: Vec<u16>,
 }
 
@@ -81,10 +76,7 @@ impl SerializedChunk {
         for y in 0..256 {
             for x in 0..16 {
                 for z in 0..16 {
-                    let block = chunk
-                        .get_block(x, y, z)
-                        .map(|b| b as u16)
-                        .unwrap_or(0);
+                    let block = chunk.get_block(x, y, z).map(|b| b as u16).unwrap_or(0);
                     blocks.push(block);
                 }
             }
@@ -118,8 +110,8 @@ impl SerializedChunk {
 }
 
 pub struct Region {
-    pos: RegionPos,
-    chunks: Vec<Option<Chunk>>,
+    pos:      RegionPos,
+    chunks:   Vec<Option<Chunk>>,
     modified: bool,
 }
 

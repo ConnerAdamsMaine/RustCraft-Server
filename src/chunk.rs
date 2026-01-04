@@ -21,10 +21,7 @@ impl ChunkPos {
     }
 
     pub fn from_block_pos(x: i32, z: i32) -> Self {
-        Self {
-            x: x >> 4,
-            z: z >> 4,
-        }
+        Self { x: x >> 4, z: z >> 4 }
     }
 }
 
@@ -67,8 +64,8 @@ impl BlockType {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Chunk {
-    pub pos: ChunkPos,
-    blocks: Vec<Vec<Vec<BlockType>>>, // [y][x][z]
+    pub pos:      ChunkPos,
+    blocks:       Vec<Vec<Vec<BlockType>>>, // [y][x][z]
     pub modified: bool,
 }
 

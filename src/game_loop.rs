@@ -1,4 +1,5 @@
 use std::time::{Duration, Instant};
+
 use anyhow::Result;
 
 const TICK_RATE: u64 = 20; // 20 ticks per second (50ms per tick)
@@ -6,14 +7,14 @@ const TARGET_TICK_DURATION: Duration = Duration::from_millis(50);
 
 pub struct GameLoop {
     tick_count: u64,
-    last_tick: Instant,
+    last_tick:  Instant,
 }
 
 impl GameLoop {
     pub fn new() -> Self {
         Self {
             tick_count: 0,
-            last_tick: Instant::now(),
+            last_tick:  Instant::now(),
         }
     }
 

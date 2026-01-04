@@ -1,24 +1,25 @@
-use crate::chunk::{Chunk, BlockType};
-use crate::protocol::PacketWriter;
 use bytes::BytesMut;
+
+use crate::chunk::{BlockType, Chunk};
+use crate::protocol::PacketWriter;
 
 /// Serialize a chunk into Minecraft protocol format (chunk data packet)
 /// This creates a basic chunk data packet that clients can render
 pub fn serialize_chunk(chunk: &Chunk) -> BytesMut {
     let mut writer = PacketWriter::new();
-    
+
     // Packet ID for Chunk Data packet (0x20 in Play state)
     writer.write_varint(0x20);
-    
+
     // Chunk X coordinate
     writer.write_int(chunk.pos.x);
-    
+
     // Chunk Z coordinate
     writer.write_int(chunk.pos.z);
-    
+
     // Full chunk flag (true = full chunk with all sections)
     writer.write_bool(true);
-    
+
     // Primary Bit Mask - which sections are included (16 sections, bottom to top)
     // For now, send all sections that have data
     let mut bitmask = 0u16;
@@ -28,26 +29,26 @@ pub fn serialize_chunk(chunk: &Chunk) -> BytesMut {
         }
     }
     writer.write_varint(bitmask as i32);
-    
+
     // Heightmaps (simplified - send a flat heightmap)
     let heightmap_data = serialize_heightmap(chunk);
     writer.write_varint(heightmap_data.len() as i32);
     writer.write_bytes(&heightmap_data);
-    
+
     // Biome data (empty for now)
     writer.write_varint(0); // 0 biomes
-    
+
     // Data section count (number of chunk sections with data)
     let section_count = (0..16).filter(|&y| has_section_data(chunk, y)).count();
     writer.write_varint(section_count as i32);
-    
+
     // Serialize each section that has data
     for section_y in 0..16 {
         if has_section_data(chunk, section_y) {
             serialize_section(&mut writer, chunk, section_y);
         }
     }
-    
+
     writer.finish()
 }
 
@@ -71,7 +72,7 @@ fn has_section_data(chunk: &Chunk, section_y: usize) -> bool {
 /// Serialize a 16x16x16 section of blocks using Minecraft's block state palette format
 fn serialize_section(writer: &mut PacketWriter, chunk: &Chunk, section_y: usize) {
     let base_y = section_y * 16;
-    
+
     // Block count (number of non-air blocks) - simplified
     let mut block_count = 0i16;
     for x in 0..16 {
@@ -86,7 +87,7 @@ fn serialize_section(writer: &mut PacketWriter, chunk: &Chunk, section_y: usize)
         }
     }
     writer.write_short(block_count);
-    
+
     // Palette (block state mapping)
     // Minecraft uses a palette system where block IDs are mapped to indices
     // For simplicity, we use a direct mapping
@@ -95,7 +96,7 @@ fn serialize_section(writer: &mut PacketWriter, chunk: &Chunk, section_y: usize)
     for block_id in &palette {
         writer.write_varint(*block_id);
     }
-    
+
     // Data array (which palette index for each block)
     let data = encode_block_data(chunk, section_y, &palette);
     writer.write_varint((data.len() / 8) as i32); // Size in longs
@@ -108,7 +109,7 @@ fn build_palette(chunk: &Chunk, section_y: usize) -> Vec<i32> {
     let mut palette = vec![0i32]; // Air is always at index 0
     let mut seen = std::collections::HashSet::new();
     seen.insert(0i32);
-    
+
     for x in 0..16 {
         for y in base_y..base_y + 16 {
             for z in 0..16 {
@@ -122,7 +123,7 @@ fn build_palette(chunk: &Chunk, section_y: usize) -> Vec<i32> {
             }
         }
     }
-    
+
     palette
 }
 
@@ -130,21 +131,21 @@ fn build_palette(chunk: &Chunk, section_y: usize) -> Vec<i32> {
 fn encode_block_data(chunk: &Chunk, section_y: usize, palette: &[i32]) -> Vec<u8> {
     let base_y = section_y * 16;
     let mut blocks = Vec::new();
-    
+
     // Collect all blocks in the section
     for y in base_y..base_y + 16 {
         for z in 0..16 {
             for x in 0..16 {
                 let block = chunk.get_block(x, y, z).unwrap_or(BlockType::Air);
                 let block_id = block_type_to_id(block);
-                
+
                 // Find index in palette
                 let palette_idx = palette.iter().position(|&id| id == block_id).unwrap_or(0);
                 blocks.push(palette_idx as u8);
             }
         }
     }
-    
+
     // Pack blocks into 64-bit longs (Minecraft uses variable bit width based on palette size)
     // For simplicity, use 1 byte per block (8 bits per block supports up to 256 block types)
     blocks

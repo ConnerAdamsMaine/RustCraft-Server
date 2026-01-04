@@ -1,27 +1,27 @@
-use std::sync::Arc;
-use std::sync::mpsc::{channel, Sender};
-use std::sync::{Mutex, Condvar};
-use std::thread;
 use std::marker::PhantomData;
+use std::sync::mpsc::{channel, Sender};
+use std::sync::{Arc, Condvar, Mutex};
+use std::thread;
+
 use anyhow::Result;
 use tracing::info;
 
 /// A generic thread pool that processes tasks of type T
 pub struct ThreadPool<T: Send + 'static> {
     workers: Vec<Worker<T>>,
-    sender: Sender<Option<Box<dyn FnOnce() + Send>>>,
+    sender:  Sender<Option<Box<dyn FnOnce() + Send>>>,
 }
 
 struct Worker<T> {
-    _id: usize,
-    _thread: Option<thread::JoinHandle<()>>,
+    _id:      usize,
+    _thread:  Option<thread::JoinHandle<()>>,
     _phantom: PhantomData<T>,
 }
 
 impl<T: Send + 'static> ThreadPool<T> {
     pub fn new(num_threads: usize, name: &str) -> Self {
         assert!(num_threads > 0, "Pool must have at least 1 thread");
-        
+
         let (sender, receiver) = channel::<Option<Box<dyn FnOnce() + Send>>>();
         let receiver = Arc::new(std::sync::Mutex::new(receiver));
 
@@ -30,25 +30,27 @@ impl<T: Send + 'static> ThreadPool<T> {
         for id in 0..num_threads {
             let receiver = Arc::clone(&receiver);
             let thread_name = format!("{}-{}", name, id);
-            
+
             let thread = thread::Builder::new()
                 .name(thread_name)
-                .spawn(move || loop {
-                    let task = {
-                        let receiver = receiver.lock().unwrap();
-                        receiver.recv().unwrap()
-                    };
+                .spawn(move || {
+                    loop {
+                        let task = {
+                            let receiver = receiver.lock().unwrap();
+                            receiver.recv().unwrap()
+                        };
 
-                    match task {
-                        Some(job) => job(),
-                        None => break, // Shutdown signal
+                        match task {
+                            Some(job) => job(),
+                            None => break, // Shutdown signal
+                        }
                     }
                 })
                 .unwrap();
 
             workers.push(Worker {
-                _id: id,
-                _thread: Some(thread),
+                _id:      id,
+                _thread:  Some(thread),
                 _phantom: PhantomData,
             });
         }
@@ -88,7 +90,7 @@ where
 /// Thread pool specifically for chunk generation (4 threads)
 #[derive(Clone)]
 pub struct ChunkGenThreadPool {
-    pool: Arc<ThreadPool<ChunkGenTask>>,
+    pool:       Arc<ThreadPool<ChunkGenTask>>,
     init_state: Arc<(Mutex<bool>, Condvar)>,
 }
 
@@ -99,10 +101,7 @@ impl ChunkGenThreadPool {
         let pool = Arc::new(ThreadPool::new(4, "ChunkGen"));
         info!("[STARTUP] Chunk generation thread pool created with 4 workers");
         let init_state = Arc::new((Mutex::new(false), Condvar::new()));
-        Self { 
-            pool, 
-            init_state,
-        }
+        Self { pool, init_state }
     }
 
     pub fn execute<F>(&self, f: F) -> Result<()>
@@ -111,14 +110,14 @@ impl ChunkGenThreadPool {
     {
         self.pool.execute(f)
     }
-    
+
     pub fn signal_init_complete(&self) {
         let (lock, condvar) = &*self.init_state;
         let mut done = lock.lock().unwrap();
         *done = true;
         condvar.notify_all();
     }
-    
+
     pub fn wait_for_init_complete(&self) {
         let (lock, condvar) = &*self.init_state;
         let mut done = lock.lock().unwrap();
@@ -174,9 +173,10 @@ impl NetworkThreadPool {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
+
+    use super::*;
 
     #[test]
     fn test_chunk_gen_pool() {

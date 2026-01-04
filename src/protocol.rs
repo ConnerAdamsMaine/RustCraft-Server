@@ -1,10 +1,11 @@
-use bytes::{Bytes, BytesMut, BufMut};
 use std::io::{Cursor, Read};
+
+use bytes::{BufMut, Bytes, BytesMut};
 use uuid::Uuid;
 
 /// Minecraft protocol packet structure
 pub struct Packet {
-    pub id: i32,
+    pub id:   i32,
     pub data: Bytes,
 }
 
@@ -31,10 +32,7 @@ pub fn read_varint(cursor: &mut Cursor<&[u8]>) -> std::io::Result<i32> {
 
         bytes_read += 1;
         if bytes_read >= 5 {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "VarInt is too big",
-            ));
+            return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "VarInt is too big"));
         }
     }
 

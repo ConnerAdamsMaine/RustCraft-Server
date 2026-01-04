@@ -13,10 +13,10 @@ pub enum Biome {
 }
 
 pub struct HeightMap {
-    data: Vec<Vec<f64>>,
-    width: usize,
+    data:   Vec<Vec<f64>>,
+    width:  usize,
     height: usize,
-    seed: u64,
+    seed:   u64,
 }
 
 impl HeightMap {
@@ -67,11 +67,14 @@ impl HeightMap {
                 let plate_scale = 256.0;
                 let collision_strength = 0.15;
 
-                let distance_to_boundary_x = (fx % plate_scale - plate_scale / 2.0).abs() / (plate_scale / 8.0);
-                let distance_to_boundary_y = (fy % plate_scale - plate_scale / 2.0).abs() / (plate_scale / 8.0);
+                let distance_to_boundary_x =
+                    (fx % plate_scale - plate_scale / 2.0).abs() / (plate_scale / 8.0);
+                let distance_to_boundary_y =
+                    (fy % plate_scale - plate_scale / 2.0).abs() / (plate_scale / 8.0);
 
                 if distance_to_boundary_x < 1.0 || distance_to_boundary_y < 1.0 {
-                    let boundary_boost = (1.0 - distance_to_boundary_x.min(distance_to_boundary_y)) * collision_strength;
+                    let boundary_boost =
+                        (1.0 - distance_to_boundary_x.min(distance_to_boundary_y)) * collision_strength;
                     self.data[y][x] = (self.data[y][x] + boundary_boost).clamp(-1.0, 1.0);
                 }
             }
@@ -133,8 +136,8 @@ impl HeightMap {
 }
 
 pub struct BiomeMap {
-    data: Vec<Vec<Biome>>,
-    width: usize,
+    data:   Vec<Vec<Biome>>,
+    width:  usize,
     height: usize,
 }
 

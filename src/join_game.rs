@@ -1,26 +1,30 @@
-use crate::protocol::{PacketWriter, write_varint};
-use crate::packet_logger::PacketLogger;
 use anyhow::Result;
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
-use uuid::Uuid;
 use tracing::warn;
+use uuid::Uuid;
+
+use crate::packet_logger::PacketLogger;
+use crate::protocol::{write_varint, PacketWriter};
 
 pub struct JoinGameHandler;
 
 impl JoinGameHandler {
-    pub async fn send_configuration_finish(stream: &mut TcpStream, packet_logger: &PacketLogger) -> Result<()> {
+    pub async fn send_configuration_finish(
+        stream: &mut TcpStream,
+        packet_logger: &PacketLogger,
+    ) -> Result<()> {
         // Configuration Finish packet (0x02) - transitions from Configuration to Play state
         // This packet has no data, just the ID
         let packet_id = write_varint(0x02);
         let packet_length = packet_id.len() as i32;
-        
+
         let mut frame = Vec::new();
         frame.extend_from_slice(&write_varint(packet_length));
         frame.extend_from_slice(&packet_id);
 
         let _ = packet_logger.log_server_packet(&frame);
-        
+
         stream.write_all(&frame).await?;
         stream.flush().await?;
 
@@ -31,10 +35,7 @@ impl JoinGameHandler {
         let mut writer = PacketWriter::new();
 
         // Write JSON chat message
-        let json_message = format!(
-            r#"{{"text":"{}"}}"#,
-            reason.replace('"', "\\\"")
-        );
+        let json_message = format!(r#"{{"text":"{}"}}"#, reason.replace('"', "\\\""));
         writer.write_string(&json_message);
 
         let packet_data = writer.finish();
@@ -58,8 +59,12 @@ impl JoinGameHandler {
         Ok(())
     }
 
-
-    pub async fn send_join_game(stream: &mut TcpStream, entity_id: i32, _username: &str, packet_logger: &PacketLogger) -> Result<()> {
+    pub async fn send_join_game(
+        stream: &mut TcpStream,
+        entity_id: i32,
+        _username: &str,
+        packet_logger: &PacketLogger,
+    ) -> Result<()> {
         let mut writer = PacketWriter::new();
 
         // Entity ID
@@ -128,7 +133,12 @@ impl JoinGameHandler {
         Ok(())
     }
 
-    pub async fn send_player_info_add(stream: &mut TcpStream, uuid: Uuid, username: &str, packet_logger: &PacketLogger) -> Result<()> {
+    pub async fn send_player_info_add(
+        stream: &mut TcpStream,
+        uuid: Uuid,
+        username: &str,
+        packet_logger: &PacketLogger,
+    ) -> Result<()> {
         let mut writer = PacketWriter::new();
 
         // Action: 0 = Add Player
@@ -188,15 +198,15 @@ impl JoinGameHandler {
         // For simplicity, using a minimal structure
 
         vec![
-            0x0A,             // TAG_Compound
-            0x00, 0x00,       // Name length (0)
+            0x0A, // TAG_Compound
+            0x00, 0x00, // Name length (0)
             // TAG_List for dimension_type
-            0x09,             // TAG_List
-            0x00, 0x1A,       // Name: "minecraft:dimension_type"
-            0x0A,             // TAG_Compound (list type)
+            0x09, // TAG_List
+            0x00, 0x1A, // Name: "minecraft:dimension_type"
+            0x0A, // TAG_Compound (list type)
             0x00, 0x00, 0x00, 0x00, // Count: 0
             // End
-            0x00,             // TAG_End
+            0x00, // TAG_End
         ]
     }
 
@@ -209,12 +219,13 @@ impl JoinGameHandler {
         // }
 
         vec![
-            0x0A,             // TAG_Compound
-            0x00, 0x00,       // Name length (0)
+            0x0A, // TAG_Compound
+            0x00, 0x00, // Name length (0)
             // Minimal required fields
-            0x01, 0x00, 0x0B, 0x70, 0x69, 0x67, 0x6C, 0x69, 0x6E, 0x5F, 0x73, 0x61, 0x66, 0x65, 0x00, // piglin_safe: 0
+            0x01, 0x00, 0x0B, 0x70, 0x69, 0x67, 0x6C, 0x69, 0x6E, 0x5F, 0x73, 0x61, 0x66, 0x65,
+            0x00, // piglin_safe: 0
             0x01, 0x00, 0x07, 0x6E, 0x61, 0x74, 0x75, 0x72, 0x61, 0x6C, 0x01, // natural: 1
-            0x00,             // TAG_End
+            0x00, // TAG_End
         ]
     }
 }

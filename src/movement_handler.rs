@@ -1,29 +1,30 @@
 use anyhow::Result;
+
 use crate::protocol::PacketReader;
 
 /// Player movement packet types
 #[derive(Debug, Clone)]
 pub struct PlayerPosition {
-    pub x: f64,
-    pub y: f64,
-    pub z: f64,
+    pub x:      f64,
+    pub y:      f64,
+    pub z:      f64,
     pub ground: bool,
 }
 
 #[derive(Debug, Clone)]
 pub struct PlayerLook {
-    pub yaw: f32,
-    pub pitch: f32,
+    pub yaw:    f32,
+    pub pitch:  f32,
     pub ground: bool,
 }
 
 #[derive(Debug, Clone)]
 pub struct PlayerPositionAndLook {
-    pub x: f64,
-    pub y: f64,
-    pub z: f64,
-    pub yaw: f32,
-    pub pitch: f32,
+    pub x:      f64,
+    pub y:      f64,
+    pub z:      f64,
+    pub yaw:    f32,
+    pub pitch:  f32,
     pub ground: bool,
 }
 
@@ -88,14 +89,7 @@ impl MovementPacket {
         MovementPacket::Look(PlayerLook { yaw, pitch, ground })
     }
 
-    pub fn new_position_and_look(
-        x: f64,
-        y: f64,
-        z: f64,
-        yaw: f32,
-        pitch: f32,
-        ground: bool,
-    ) -> Self {
+    pub fn new_position_and_look(x: f64, y: f64, z: f64, yaw: f32, pitch: f32, ground: bool) -> Self {
         MovementPacket::PositionAndLook(PlayerPositionAndLook {
             x,
             y,

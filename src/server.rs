@@ -1,26 +1,27 @@
+use std::path::Path;
+use std::sync::Arc;
+
 use anyhow::Result;
 use tokio::net::{TcpListener, TcpStream};
 use tracing::{error, info};
-use std::sync::Arc;
-use std::path::Path;
 
-use crate::player::Player;
-use crate::game_loop::GameLoop;
 use crate::chunk_generator::ChunkGenerator;
 use crate::chunk_storage::ChunkStorage;
 use crate::error_tracker::ErrorTracker;
-use crate::thread_pool::{ChunkGenThreadPool, FileIOThreadPool, NetworkThreadPool};
+use crate::game_loop::GameLoop;
 use crate::packet_logger::PacketLogger;
+use crate::player::Player;
+use crate::thread_pool::{ChunkGenThreadPool, FileIOThreadPool, NetworkThreadPool};
 
 pub struct MinecraftServer {
-    listener: TcpListener,
-    game_loop: Arc<tokio::sync::Mutex<GameLoop>>,
-    chunk_storage: ChunkStorage,
-    error_tracker: Arc<ErrorTracker>,
+    listener:       TcpListener,
+    game_loop:      Arc<tokio::sync::Mutex<GameLoop>>,
+    chunk_storage:  ChunkStorage,
+    error_tracker:  Arc<ErrorTracker>,
     chunk_gen_pool: Arc<ChunkGenThreadPool>,
-    file_io_pool: Arc<FileIOThreadPool>,
-    network_pool: Arc<NetworkThreadPool>,
-    packet_logger: PacketLogger,
+    file_io_pool:   Arc<FileIOThreadPool>,
+    network_pool:   Arc<NetworkThreadPool>,
+    packet_logger:  PacketLogger,
 }
 
 impl MinecraftServer {
@@ -70,7 +71,7 @@ impl MinecraftServer {
             info!("[STARTUP] World directory does not exist, generating initial 16x16 chunks...");
             let chunk_gen_pool_clone = chunk_gen_pool.clone();
             let chunk_storage_clone = chunk_storage.clone();
-            
+
             tokio::spawn(async move {
                 // Generate 16x16 chunk grid around origin
                 for x in -8..8 {
@@ -102,6 +103,7 @@ impl MinecraftServer {
         });
 
         loop {
+            let packet_logger = packet_logger.clone();
             match self.listener.accept().await {
                 Ok((socket, addr)) => {
                     info!("[CONNECTION] New connection from {}", addr);

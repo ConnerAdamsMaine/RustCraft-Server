@@ -1,18 +1,19 @@
-use crate::protocol::{PacketReader, PacketWriter, write_varint, read_varint};
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
-use uuid::Uuid;
 use tracing::{info, warn};
+use uuid::Uuid;
+
+use crate::protocol::{read_varint, write_varint, PacketReader, PacketWriter};
 
 #[derive(Debug, Clone)]
 pub struct PlayerLogin {
     pub username: String,
-    pub uuid: Uuid,
+    pub uuid:     Uuid,
 }
 
 pub struct LoginHandler {
-    stream: TcpStream,
+    stream:           TcpStream,
     protocol_version: i32,
 }
 
@@ -28,7 +29,7 @@ impl LoginHandler {
 
     pub async fn handle_login(&mut self) -> Result<PlayerLogin> {
         tracing::debug!("[LOGIN] Starting login flow");
-        
+
         // Read Handshake packet
         tracing::debug!("[LOGIN] Waiting for Handshake packet...");
         if let Err(e) = self.read_handshake().await {
@@ -61,7 +62,7 @@ impl LoginHandler {
             Ok(name) => {
                 tracing::debug!("[LOGIN] Login Start received, username: {}", name);
                 name
-            },
+            }
             Err(e) => {
                 warn!("[LOGIN] Login start failed: {}", e);
                 self.send_disconnect("Invalid username").await.ok();
@@ -95,21 +96,24 @@ impl LoginHandler {
         // The client will transition to Configuration state after Login Success
         // We'll skip the full configuration flow for now
         tracing::debug!("[LOGIN] Login flow complete, returning to server");
-        
+
         Ok(PlayerLogin { username, uuid })
     }
 
     async fn read_handshake(&mut self) -> Result<()> {
         let mut length_buf = [0u8; 5];
-        
+
         // Read packet length
         let mut bytes_read = 0;
         loop {
-            let n = self.stream.read(&mut length_buf[bytes_read..bytes_read + 1]).await?;
+            let n = self
+                .stream
+                .read(&mut length_buf[bytes_read..bytes_read + 1])
+                .await?;
             if n == 0 {
                 return Err(anyhow!("Connection closed during handshake"));
             }
-            
+
             if length_buf[bytes_read] & 0x80 == 0 {
                 bytes_read += 1;
                 break;
@@ -121,7 +125,7 @@ impl LoginHandler {
         }
 
         let packet_length = read_varint(&mut std::io::Cursor::new(&length_buf[..bytes_read]))? as usize;
-        
+
         // Read packet data
         let mut packet_data = vec![0u8; packet_length];
         self.stream.read_exact(&mut packet_data).await?;
@@ -149,15 +153,18 @@ impl LoginHandler {
 
     async fn read_login_start(&mut self) -> Result<String> {
         let mut length_buf = [0u8; 5];
-        
+
         // Read packet length
         let mut bytes_read = 0;
         loop {
-            let n = self.stream.read(&mut length_buf[bytes_read..bytes_read + 1]).await?;
+            let n = self
+                .stream
+                .read(&mut length_buf[bytes_read..bytes_read + 1])
+                .await?;
             if n == 0 {
                 return Err(anyhow!("Connection closed during login start"));
             }
-            
+
             if length_buf[bytes_read] & 0x80 == 0 {
                 bytes_read += 1;
                 break;
@@ -169,7 +176,7 @@ impl LoginHandler {
         }
 
         let packet_length = read_varint(&mut std::io::Cursor::new(&length_buf[..bytes_read]))? as usize;
-        
+
         // Read packet data
         let mut packet_data = vec![0u8; packet_length];
         self.stream.read_exact(&mut packet_data).await?;
@@ -192,18 +199,18 @@ impl LoginHandler {
 
     async fn send_login_success(&mut self, username: &str, uuid: &Uuid) -> Result<()> {
         let mut writer = PacketWriter::new();
-        
+
         // Game Profile structure:
         // - UUID
         // - Username
         // - Properties (array of {name, value, signature})
-        
+
         // Write UUID
         writer.write_uuid(uuid);
-        
+
         // Write username
         writer.write_string(username);
-        
+
         // Write properties count (empty array)
         writer.write_varint(0);
 
@@ -230,26 +237,20 @@ impl LoginHandler {
         Uuid::new_v3(&namespace, offline_name.as_bytes())
     }
 
-
     fn is_valid_username(username: &str) -> bool {
         // Minecraft username must be 3-16 characters, alphanumeric + underscore
         if username.is_empty() || username.len() > 16 {
             return false;
         }
 
-        username
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '_')
+        username.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
     }
 
     async fn send_disconnect(&mut self, reason: &str) -> Result<()> {
         let mut writer = PacketWriter::new();
 
         // Write JSON chat message
-        let json_message = format!(
-            r#"{{"text":"{}"}}"#,
-            reason.replace('"', "\\\"")
-        );
+        let json_message = format!(r#"{{"text":"{}"}}"#, reason.replace('"', "\\\""));
         writer.write_string(&json_message);
 
         let packet_data = writer.finish();

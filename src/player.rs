@@ -1,28 +1,29 @@
+use std::io::Cursor;
+use std::sync::Arc;
+
 use anyhow::Result;
+use tokio::io::AsyncReadExt;
 use tokio::net::TcpStream;
 use uuid::Uuid;
-use std::sync::Arc;
+
 use crate::chunk::ChunkPos;
 use crate::chunk_storage::ChunkStorage;
-use crate::login::LoginHandler;
+use crate::error_tracker::{ErrorKey, ErrorTracker};
 use crate::join_game::JoinGameHandler;
-use crate::error_tracker::{ErrorTracker, ErrorKey};
-use crate::thread_pool::{ChunkGenThreadPool, FileIOThreadPool, NetworkThreadPool};
-use crate::chunk_sender;
-use crate::movement_handler;
-use crate::protocol::read_varint;
+use crate::login::LoginHandler;
 use crate::packet_logger::PacketLogger;
-use std::io::Cursor;
-use tokio::io::AsyncReadExt;
+use crate::protocol::read_varint;
+use crate::thread_pool::{ChunkGenThreadPool, FileIOThreadPool, NetworkThreadPool};
+use crate::{chunk_sender, movement_handler};
 
 pub struct Player {
-    pub uuid: Uuid,
-    pub username: String,
-    pub socket: TcpStream,
-    pub state: PlayerState,
-    pub x: f64,
-    pub y: f64,
-    pub z: f64,
+    pub uuid:      Uuid,
+    pub username:  String,
+    pub socket:    TcpStream,
+    pub state:     PlayerState,
+    pub x:         f64,
+    pub y:         f64,
+    pub z:         f64,
     loaded_chunks: std::collections::HashSet<ChunkPos>,
     packet_logger: PacketLogger,
 }
@@ -61,25 +62,26 @@ impl Player {
     ) -> Result<()> {
         self.packet_logger = packet_logger;
         tracing::debug!("[PLAYER] Player handler starting");
-        
+
         // Wait for world initialization to complete (in blocking task to not block async runtime)
         tracing::debug!("[PLAYER] Waiting for world initialization...");
         let chunk_gen_pool_clone = chunk_gen_pool.clone();
         tokio::task::spawn_blocking(move || {
             chunk_gen_pool_clone.wait_for_init_complete();
             tracing::info!("[PLAYER] World initialization complete, accepting players");
-        }).await?;
-        
+        })
+        .await?;
+
         // Handle login flow
         tracing::debug!("[PLAYER] Creating LoginHandler");
         let mut login_handler = LoginHandler::new(self.socket);
-        
+
         tracing::debug!("[PLAYER] Starting login flow");
         let player_login = match login_handler.handle_login().await {
             Ok(login) => {
                 tracing::debug!("[PLAYER] Login successful");
                 login
-            },
+            }
             Err(e) => {
                 tracing::error!("[LOGIN] Authentication failed: {}", e);
                 let key = ErrorKey::new("LOGIN", format!("auth_failed: {}", e));
@@ -87,7 +89,7 @@ impl Player {
                 return Err(e);
             }
         };
-        
+
         tracing::debug!("[PLAYER] Extracting login info");
         self.uuid = player_login.uuid;
         self.username = player_login.username.clone();
@@ -106,7 +108,9 @@ impl Player {
 
         // Send configuration finish packet to transition to Play state
         tracing::debug!("[PLAYER] Sending Configuration Finish packet");
-        if let Err(e) = JoinGameHandler::send_configuration_finish(&mut self.socket, &self.packet_logger).await {
+        if let Err(e) =
+            JoinGameHandler::send_configuration_finish(&mut self.socket, &self.packet_logger).await
+        {
             tracing::error!("[PLAYER] Failed to send config finish to {}: {}", self.username, e);
             let key = ErrorKey::new("CONFIG", "finish_failed");
             error_tracker.record_error(key);
@@ -116,7 +120,9 @@ impl Player {
 
         // Send join game packet
         tracing::debug!("[PLAYER] Sending Join Game packet");
-        if let Err(e) = JoinGameHandler::send_join_game(&mut self.socket, 1, &self.username, &self.packet_logger).await {
+        if let Err(e) =
+            JoinGameHandler::send_join_game(&mut self.socket, 1, &self.username, &self.packet_logger).await
+        {
             tracing::error!("[PLAYER] Failed to send join game packet to {}: {}", self.username, e);
             let key = ErrorKey::new("JOIN_GAME", "send_failed");
             error_tracker.record_error(key);
@@ -126,7 +132,14 @@ impl Player {
 
         // Send player info add packet
         tracing::debug!("[PLAYER] Sending Player Info Add packet");
-        if let Err(e) = JoinGameHandler::send_player_info_add(&mut self.socket, self.uuid, &self.username, &self.packet_logger).await {
+        if let Err(e) = JoinGameHandler::send_player_info_add(
+            &mut self.socket,
+            self.uuid,
+            &self.username,
+            &self.packet_logger,
+        )
+        .await
+        {
             tracing::error!("[PLAYER] Failed to send player info to {}: {}", self.username, e);
             let key = ErrorKey::new("PLAYER_INFO", "send_failed");
             error_tracker.record_error(key);
@@ -155,8 +168,16 @@ impl Player {
             {
                 let socket = &mut self.socket;
                 let logger = &self.packet_logger;
-                match Self::handle_incoming_packets_static(socket, &mut self.x, &mut self.y, &mut self.z, logger).await {
-                    Ok(_) => {},
+                match Self::handle_incoming_packets_static(
+                    socket,
+                    &mut self.x,
+                    &mut self.y,
+                    &mut self.z,
+                    logger,
+                )
+                .await
+                {
+                    Ok(_) => {}
                     Err(e) => {
                         tracing::error!("[PLAYER] {} packet read error: {}", self.username, e);
                         return Err(e);
@@ -232,7 +253,7 @@ impl Player {
         // Read packet length
         let mut length_bytes = [0u8; 5];
         let n = socket.read(&mut length_bytes).await?;
-        
+
         if n == 0 {
             // Client disconnected
             tracing::warn!("[PACKET] Client disconnected (read 0 bytes)");
@@ -247,7 +268,7 @@ impl Player {
             Ok(len) => {
                 tracing::trace!("[PACKET] Packet length: {}", len);
                 len as usize
-            },
+            }
             Err(e) => {
                 tracing::trace!("[PACKET] Could not parse varint: {}, trying again later", e);
                 return Ok(()); // Incomplete packet, try again later
@@ -259,19 +280,23 @@ impl Player {
         match socket.read_exact(&mut packet_data).await {
             Ok(_) => {
                 tracing::trace!("[PACKET] Read packet data ({} bytes)", packet_length);
-                
+
                 // Log the full packet (length + data)
                 let mut full_packet = length_bytes[..n].to_vec();
                 full_packet.extend_from_slice(&packet_data);
                 let _ = packet_logger.log_client_packet(&full_packet);
-                
+
                 // Parse packet ID
                 let mut cursor = Cursor::new(&packet_data[..]);
                 if let Ok(packet_id) = read_varint(&mut cursor) {
                     let pos = cursor.position() as usize;
                     let payload = &packet_data[pos..];
 
-                    tracing::trace!("[PACKET] Packet ID: 0x{:02x}, payload: {} bytes", packet_id, payload.len());
+                    tracing::trace!(
+                        "[PACKET] Packet ID: 0x{:02x}, payload: {} bytes",
+                        packet_id,
+                        payload.len()
+                    );
 
                     // Handle movement packets
                     if let Ok(Some(movement)) = movement_handler::parse_movement_packet(packet_id, payload) {

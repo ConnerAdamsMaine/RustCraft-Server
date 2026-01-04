@@ -1,27 +1,28 @@
-mod server;
-mod protocol;
-mod player;
-mod world;
-mod game_loop;
+mod cache;
 mod chunk;
 mod chunk_generator;
-mod noise;
-mod terrain_gen;
-mod region;
-mod cache;
-mod chunk_storage;
-mod login;
-mod join_game;
-mod error_tracker;
-mod thread_pool;
 mod chunk_protocol;
 mod chunk_sender;
+mod chunk_storage;
+mod error_tracker;
+mod game_loop;
+mod join_game;
+mod login;
 mod movement_handler;
+mod noise;
 mod packet_logger;
+mod player;
+mod protocol;
+mod region;
+mod server;
+mod terrain_gen;
+mod thread_pool;
+mod world;
+
+use std::sync::Arc;
 
 use anyhow::Result;
 use tracing_subscriber;
-use std::sync::Arc;
 
 #[tokio::main]
 async fn main() -> Result<()> {

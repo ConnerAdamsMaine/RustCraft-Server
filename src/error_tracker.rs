@@ -1,7 +1,8 @@
-use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+
+use parking_lot::RwLock;
 use tracing::error;
 
 const ERROR_THRESHOLD: usize = 10;
@@ -9,14 +10,14 @@ const ERROR_WINDOW: Duration = Duration::from_secs(10);
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct ErrorKey {
-    category: String,
+    category:  String,
     semantics: String,
 }
 
 impl ErrorKey {
     pub fn new(category: impl Into<String>, semantics: impl Into<String>) -> Self {
         Self {
-            category: category.into(),
+            category:  category.into(),
             semantics: semantics.into(),
         }
     }
@@ -24,7 +25,7 @@ impl ErrorKey {
 
 #[derive(Debug, Clone)]
 struct ErrorEntry {
-    count: usize,
+    count:            usize,
     first_occurrence: Instant,
 }
 
@@ -44,7 +45,7 @@ impl ErrorTracker {
         let now = Instant::now();
 
         let entry = errors.entry(key.clone()).or_insert(ErrorEntry {
-            count: 0,
+            count:            0,
             first_occurrence: now,
         });
 
