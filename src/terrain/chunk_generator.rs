@@ -12,11 +12,14 @@ pub struct ChunkGenerator {
 }
 
 impl ChunkGenerator {
-    pub fn new(seed: u64) -> Self {
+    pub fn new<U>(seed: U) -> Self
+    where
+        U: Into<u64>,
+    {
         Self {
-            seed,
+            seed:       seed.into(),
             height_map: Arc::new(RwLock::new(None)),
-            biome_map: Arc::new(RwLock::new(None)),
+            biome_map:  Arc::new(RwLock::new(None)),
         }
     }
 

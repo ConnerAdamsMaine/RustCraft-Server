@@ -65,7 +65,7 @@ impl ChunkStorage {
     }
 
     pub fn start_hit_reset_task(&self) {
-        let cache = self.cache.clone();
+        let cache = Arc::clone(&self.cache);
         tokio::spawn(async move {
             loop {
                 tokio::time::sleep(tokio::time::Duration::from_secs(300)).await; // 5 minutes

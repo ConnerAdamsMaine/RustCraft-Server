@@ -1,4 +1,5 @@
 use std::io::{Cursor, Read};
+use std::ops::{AddAssign, BitOrAssign, ShrAssign as _};
 
 use anyhow::{anyhow, Result};
 use bytes::{BufMut, Bytes, BytesMut};
@@ -33,41 +34,58 @@ impl Packet {
 
 /// Read a Minecraft varint from bytes
 pub fn read_varint(cursor: &mut Cursor<&[u8]>) -> std::io::Result<i32> {
-    let mut result = 0;
-    let mut bytes_read = 0;
-    let mut byte = [0u8; 1];
+    let mut result: i32 = 0;
+    let mut bytes_read: i32 = 0;
+    let mut byte: [u8; 1] = [0u8; 1];
 
-    loop {
-        cursor.read_exact(&mut byte)?;
+    while let Ok(()) = cursor.read_exact(&mut byte) {
+        //
         let b = byte[0];
-        result |= ((b & 0x7F) as i32) << (7 * bytes_read);
-
+        result.bitor_assign(((b & 0x7F) as i32) << (7 * bytes_read));
         if (b & 0x80) == 0 {
             break;
         }
-
-        bytes_read += 1;
+        bytes_read.add_assign(1);
         if bytes_read >= 5 {
             return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "VarInt is too big"));
         }
     }
+
+    // loop {
+    //     cursor.read_exact(&mut byte)?;
+    //     let b = byte[0];
+    //     result |= ((b & 0x7F) as i32) << (7 * bytes_read);
+    //
+    //     if (b & 0x80) == 0 {
+    //         break;
+    //     }
+    //
+    //     bytes_read += 1;
+    //     if bytes_read >= 5 {
+    //         return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "VarInt is too big"));
+    //     }
+    // }
+
+    tracing::debug!("[PACKET] Packet length bytes read: {}", bytes_read);
+    tracing::debug!("[PACKET] Read VarInt: {}", result);
 
     Ok(result)
 }
 
 /// Write a Minecraft varint to bytes
 pub fn write_varint(value: i32) -> Vec<u8> {
-    let mut result = Vec::new();
-    let mut v = value as u32;
+    let mut result: Vec<u8> = Vec::new();
+    let mut v: u32 = value as u32;
 
     loop {
-        let mut temp = (v & 0x7F) as u8;
-        v >>= 7;
+        let mut temp: u8 = (v & 0x7F) as u8;
+        v >>= 7; // u32
         if v != 0 {
             temp |= 0x80;
         }
         result.push(temp);
         if v == 0 {
+            // v: u32
             break;
         }
     }
@@ -267,9 +285,72 @@ pub fn write_optional_bytes<A: AsRef<[u8]>>(writer: &mut PacketWriter, data: Opt
     }
 }
 
+#[derive(Debug)]
+pub struct DimensionCompound {
+    name:             &'static str,
+    height:           i32,
+    min_y:            i32,
+    has_skylight:     bool,
+    has_ceiling:      bool,
+    ultrawarm:        bool,
+    natural:          bool,
+    coordinate_scale: f32,
+}
+
+impl DimensionCompound {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        name: &'static str,
+        height: i32,
+        min_y: i32,
+        has_skylight: bool,
+        has_ceiling: bool,
+        ultrawarm: bool,
+        natural: bool,
+        coordinate_scale: f32,
+    ) -> Self {
+        Self {
+            name,
+            height,
+            min_y,
+            has_skylight,
+            has_ceiling,
+            ultrawarm,
+            natural,
+            coordinate_scale,
+        }
+    }
+}
+
+pub struct DamageTypeCompound {
+    message_id: &'static str,
+    scaling:    &'static str,
+    exhaustion: f32,
+}
+
+impl DamageTypeCompound {
+    pub fn new<S>(message_id: &'static S, scaling: &'static S, exhaustion: f32) -> Self
+    where
+        S: AsRef<str> + 'static + ?Sized,
+    {
+        Self {
+            message_id: message_id.as_ref(),
+            scaling: scaling.as_ref(),
+            exhaustion,
+        }
+    }
+}
+
 // Simple NBT encoder for registry data
+#[derive(Debug)]
 pub struct NBTBuilder {
     data: BytesMut,
+}
+
+impl Default for NBTBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl NBTBuilder {
@@ -285,16 +366,7 @@ impl NBTBuilder {
     }
 
     /// Create a dimension type compound with minimal properties
-    pub fn dimension_compound(
-        name: &str,
-        height: i32,
-        min_y: i32,
-        has_skylight: bool,
-        has_ceiling: bool,
-        ultrawarm: bool,
-        natural: bool,
-        coordinate_scale: f32,
-    ) -> Vec<u8> {
+    pub fn dimension_compound(dim_comp: DimensionCompound) -> Vec<u8> {
         let mut bytes = BytesMut::new();
 
         // TAG_Compound
@@ -337,23 +409,23 @@ impl NBTBuilder {
         // Write all fields
         write_nbt_byte!(
             "bed_works",
-            if name.contains("nether") || name.contains("end") {
+            if dim_comp.name.contains("nether") || dim_comp.name.contains("end") {
                 0
             } else {
                 1
             }
         );
-        write_nbt_byte!("has_ceiling", if has_ceiling { 1 } else { 0 });
-        write_nbt_byte!("has_skylight", if has_skylight { 1 } else { 0 });
-        write_nbt_byte!("has_raids", if name.contains("end") { 0 } else { 1 });
-        write_nbt_int!("height", height);
-        write_nbt_int!("logical_height", height);
-        write_nbt_int!("min_y", min_y);
-        write_nbt_byte!("ultrawarm", if ultrawarm { 1 } else { 0 });
-        write_nbt_byte!("natural", if natural { 1 } else { 0 });
-        write_nbt_float!("coordinate_scale", coordinate_scale);
+        write_nbt_byte!("has_ceiling", if dim_comp.has_ceiling { 1 } else { 0 });
+        write_nbt_byte!("has_skylight", if dim_comp.has_skylight { 1 } else { 0 });
+        write_nbt_byte!("has_raids", if dim_comp.name.contains("end") { 0 } else { 1 });
+        write_nbt_int!("height", dim_comp.height);
+        write_nbt_int!("logical_height", dim_comp.height);
+        write_nbt_int!("min_y", dim_comp.min_y);
+        write_nbt_byte!("ultrawarm", if dim_comp.ultrawarm { 1 } else { 0 });
+        write_nbt_byte!("natural", if dim_comp.natural { 1 } else { 0 });
+        write_nbt_float!("coordinate_scale", dim_comp.coordinate_scale);
         write_nbt_byte!("piglin_safe", 0);
-        write_nbt_byte!("respawn_anchor_works", if name.contains("nether") { 1 } else { 0 });
+        write_nbt_byte!("respawn_anchor_works", if dim_comp.name.contains("nether") { 1 } else { 0 });
 
         // TAG_End
         bytes.put_u8(0x00);
@@ -362,7 +434,10 @@ impl NBTBuilder {
     }
 
     /// Create a damage type compound
-    pub fn damage_type_compound(message_id: &str, scaling: &str, exhaustion: f32) -> Vec<u8> {
+    pub fn damage_type_compound(
+        // message_id: &str, scaling: &str, exhaustion: f32
+        dmg_comp: DamageTypeCompound,
+    ) -> Vec<u8> {
         let mut bytes = BytesMut::new();
 
         bytes.put_u8(0x0A); // TAG_Compound
@@ -373,14 +448,14 @@ impl NBTBuilder {
         let name_bytes = b"exhaustion";
         bytes.extend_from_slice(&(name_bytes.len() as i16).to_be_bytes());
         bytes.extend_from_slice(name_bytes);
-        bytes.extend_from_slice(&exhaustion.to_be_bytes());
+        bytes.extend_from_slice(&dmg_comp.exhaustion.to_be_bytes());
 
         // message_id: TAG_String
         bytes.put_u8(0x08);
         let name_bytes = b"message_id";
         bytes.extend_from_slice(&(name_bytes.len() as i16).to_be_bytes());
         bytes.extend_from_slice(name_bytes);
-        let value_bytes = message_id.as_bytes();
+        let value_bytes = dmg_comp.message_id.as_bytes();
         bytes.extend_from_slice(&(value_bytes.len() as i16).to_be_bytes());
         bytes.extend_from_slice(value_bytes);
 
@@ -389,7 +464,7 @@ impl NBTBuilder {
         let name_bytes = b"scaling";
         bytes.extend_from_slice(&(name_bytes.len() as i16).to_be_bytes());
         bytes.extend_from_slice(name_bytes);
-        let value_bytes = scaling.as_bytes();
+        let value_bytes = dmg_comp.scaling.as_bytes();
         bytes.extend_from_slice(&(value_bytes.len() as i16).to_be_bytes());
         bytes.extend_from_slice(value_bytes);
 

@@ -25,7 +25,6 @@ pub struct Player {
     pub y:         f64,
     pub z:         f64,
     loaded_chunks: std::collections::HashSet<ChunkPos>,
-    // packet_logger: &'static crate::PacketLogger, // PacketLogger,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -47,7 +46,6 @@ impl Player {
             y: 64.0,
             z: 0.0,
             loaded_chunks: std::collections::HashSet::new(),
-            // packet_logger: &crate::LOGGER,
         })
     }
 
@@ -57,12 +55,11 @@ impl Player {
         error_tracker: Arc<ErrorTracker>,
         chunk_gen_pool: Arc<ChunkGenThreadPool>,
     ) -> Result<()> {
-        // self.packet_logger = packet_logger.as_ref().clone();
         tracing::debug!("[PLAYER] Player handler starting");
 
         // Wait for world initialization to complete (in blocking task to not block async runtime)
         tracing::debug!("[PLAYER] Waiting for world initialization...");
-        let chunk_gen_pool_clone = chunk_gen_pool.clone();
+        let chunk_gen_pool_clone = Arc::clone(&chunk_gen_pool);
         tokio::task::spawn_blocking(move || {
             chunk_gen_pool_clone.wait_for_init_complete();
             tracing::info!("[PLAYER] World initialization complete, accepting players");
@@ -71,7 +68,7 @@ impl Player {
 
         // Handle login flow
         tracing::debug!("[PLAYER] Creating LoginHandler");
-        let mut login_handler = LoginHandler::new(self.socket);
+        let mut login_handler = LoginHandler::from(self.socket); // new(self.socket);
 
         tracing::debug!("[PLAYER] Starting login flow");
         let player_login = match login_handler.handle_login().await {
@@ -95,7 +92,7 @@ impl Player {
         tracing::debug!("[PLAYER] Player state set to Login (awaiting configuration)");
 
         tracing::info!(
-            "[PLAYER] '{}' ({}) joined at ({}, {}, {})",
+            "[PLAYER] '{}' ({}) joined at (x:{}, y:{}, z:{})",
             self.username,
             self.uuid,
             self.x,

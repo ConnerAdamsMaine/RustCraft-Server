@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use tokio::net::{TcpListener, TcpStream};
-use tracing::{error, info};
+use tracing::{debug, error, info};
 
 use crate::chunk::ChunkStorage;
 use crate::core::game_loop::GameLoop;
@@ -29,7 +29,7 @@ impl MinecraftServer {
         let chunk_gen_pool = Arc::new(ChunkGenThreadPool::new());
 
         // Create chunk generator and storage with the pool
-        let chunk_gen = Arc::new(ChunkGenerator::new(12345));
+        let chunk_gen = Arc::new(ChunkGenerator::new::<u64>(12345));
         let chunk_storage = ChunkStorage::new(chunk_gen, chunk_gen_pool.clone())?;
 
         Ok(Self {
@@ -38,13 +38,12 @@ impl MinecraftServer {
             chunk_storage,
             error_tracker,
             chunk_gen_pool,
-            // packet_logger,
         })
     }
 
     pub async fn run(self) -> Result<()> {
         let game_loop = self.game_loop.clone();
-        let chunk_storage = self.chunk_storage.clone();
+        let chunk_storage = Arc::new(self.chunk_storage.clone());
         let error_tracker = self.error_tracker.clone();
         let chunk_gen_pool = self.chunk_gen_pool.clone();
         // let packet_logger = self.packet_logger.as_ref();
@@ -57,8 +56,9 @@ impl MinecraftServer {
         if !Path::new(world_path).exists() {
             info!("[STARTUP] World directory does not exist, generating initial 16x16 chunks...");
             let chunk_gen_pool_clone = chunk_gen_pool.clone();
-            let chunk_storage_clone = chunk_storage.clone();
+            let chunk_storage_clone = Arc::clone(&chunk_storage);
 
+            // TODO: @use_existing : Could we call the existing impl of ChunkStorage::pregenerate_spawn_area here instead?
             tokio::spawn(async move {
                 // Generate 16x16 chunk grid around origin
                 for x in -8..8 {
@@ -93,14 +93,14 @@ impl MinecraftServer {
             match self.listener.accept().await {
                 Ok((socket, addr)) => {
                     info!("[CONNECTION] New connection from {}", addr);
-                    let chunk_storage = chunk_storage.clone();
+                    let chunk_storage = Arc::clone(&chunk_storage);
                     let error_tracker = error_tracker.clone();
                     let chunk_gen_pool = chunk_gen_pool.clone();
                     tokio::spawn(async move {
                         if let Err(e) = handle_client(
                             //
                             socket,
-                            chunk_storage,
+                            Arc::clone(&chunk_storage).as_ref().clone(),
                             error_tracker,
                             chunk_gen_pool,
                         )
