@@ -7,7 +7,7 @@ use tracing::{error, info};
 
 use crate::chunk::ChunkStorage;
 use crate::core::game_loop::GameLoop;
-use crate::core::thread_pool::{ChunkGenThreadPool, FileIOThreadPool, NetworkThreadPool};
+use crate::core::thread_pool::ChunkGenThreadPool;
 use crate::error_tracker::ErrorTracker;
 use crate::player::Player;
 use crate::terrain::ChunkGenerator;
@@ -18,8 +18,6 @@ pub struct MinecraftServer {
     chunk_storage:  ChunkStorage,
     error_tracker:  Arc<ErrorTracker>,
     chunk_gen_pool: Arc<ChunkGenThreadPool>,
-    file_io_pool:   Arc<FileIOThreadPool>,
-    network_pool:   Arc<NetworkThreadPool>,
     // packet_logger:  Pin<Box<PacketLogger>>,
 }
 
@@ -31,10 +29,8 @@ impl MinecraftServer {
         // Initialize packet logger
         // let packet_logger = Pin::new(Box::new(PacketLogger::new()?));
 
-        // Initialize thread pools first
+        // Initialize thread pools
         let chunk_gen_pool = Arc::new(ChunkGenThreadPool::new());
-        let file_io_pool = Arc::new(FileIOThreadPool::new());
-        let network_pool = Arc::new(NetworkThreadPool::new());
 
         // Create chunk generator and storage with the pool
         let chunk_gen = Arc::new(ChunkGenerator::new(12345));
@@ -46,8 +42,6 @@ impl MinecraftServer {
             chunk_storage,
             error_tracker,
             chunk_gen_pool,
-            file_io_pool,
-            network_pool,
             // packet_logger,
         })
     }
@@ -57,8 +51,6 @@ impl MinecraftServer {
         let chunk_storage = self.chunk_storage.clone();
         let error_tracker = self.error_tracker.clone();
         let chunk_gen_pool = self.chunk_gen_pool.clone();
-        let file_io_pool = self.file_io_pool.clone();
-        let network_pool = self.network_pool.clone();
         // let packet_logger = self.packet_logger.as_ref();
 
         // Start hit count reset task (runs every 5 minutes)
@@ -108,16 +100,12 @@ impl MinecraftServer {
                     let chunk_storage = chunk_storage.clone();
                     let error_tracker = error_tracker.clone();
                     let chunk_gen_pool = chunk_gen_pool.clone();
-                    let file_io_pool = file_io_pool.clone();
-                    let network_pool = network_pool.clone();
                     tokio::spawn(async move {
                         if let Err(e) = handle_client(
                             socket,
                             chunk_storage,
                             error_tracker,
                             chunk_gen_pool,
-                            file_io_pool,
-                            network_pool,
                         )
                         .await
                         {
@@ -143,12 +131,10 @@ async fn handle_client(
     chunk_storage: ChunkStorage,
     error_tracker: Arc<ErrorTracker>,
     chunk_gen_pool: Arc<ChunkGenThreadPool>,
-    file_io_pool: Arc<FileIOThreadPool>,
-    network_pool: Arc<NetworkThreadPool>,
 ) -> Result<()> {
     let player = Player::new(socket).await?;
     player
-        .handle(chunk_storage, error_tracker, chunk_gen_pool, file_io_pool, network_pool)
+        .handle(chunk_storage, error_tracker, chunk_gen_pool)
         .await?;
     Ok(())
 }

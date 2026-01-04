@@ -7,7 +7,7 @@ use tokio::net::TcpStream;
 use uuid::Uuid;
 
 use crate::chunk::{chunk_sender, ChunkStorage};
-use crate::core::thread_pool::{ChunkGenThreadPool, FileIOThreadPool, NetworkThreadPool};
+use crate::core::thread_pool::ChunkGenThreadPool;
 use crate::error_tracker::{ErrorKey, ErrorTracker};
 use crate::network::protocol::read_varint;
 use crate::network::LoginHandler;
@@ -56,8 +56,6 @@ impl Player {
         _chunk_storage: ChunkStorage,
         error_tracker: Arc<ErrorTracker>,
         chunk_gen_pool: Arc<ChunkGenThreadPool>,
-        _file_io_pool: Arc<FileIOThreadPool>,
-        _network_pool: Arc<NetworkThreadPool>,
     ) -> Result<()> {
         // self.packet_logger = packet_logger.as_ref().clone();
         tracing::debug!("[PLAYER] Player handler starting");

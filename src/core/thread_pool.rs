@@ -96,6 +96,14 @@ pub struct ChunkGenThreadPool {
 
 pub struct ChunkGenTask;
 
+/// Thread pool for plugins (2 threads, reserved for future plugin system)
+#[derive(Clone)]
+pub struct PluginThreadPool {
+    pool: Arc<ThreadPool<PluginTask>>,
+}
+
+pub struct PluginTask;
+
 impl ChunkGenThreadPool {
     pub fn new() -> Self {
         let pool = Arc::new(ThreadPool::new(4, "ChunkGen"));
@@ -127,39 +135,10 @@ impl ChunkGenThreadPool {
     }
 }
 
-/// Thread pool for file I/O operations (1 thread)
-pub struct FileIOThreadPool {
-    pool: ThreadPool<FileIOTask>,
-}
-
-pub struct FileIOTask;
-
-impl FileIOThreadPool {
+impl PluginThreadPool {
     pub fn new() -> Self {
-        let pool = ThreadPool::new(1, "FileIO");
-        info!("[STARTUP] File I/O thread pool created with 1 worker");
-        Self { pool }
-    }
-
-    pub fn execute<F>(&self, f: F) -> Result<()>
-    where
-        F: FnOnce() + Send + 'static,
-    {
-        self.pool.execute(f)
-    }
-}
-
-/// Thread pool for networking operations (1 thread)
-pub struct NetworkThreadPool {
-    pool: ThreadPool<NetworkTask>,
-}
-
-pub struct NetworkTask;
-
-impl NetworkThreadPool {
-    pub fn new() -> Self {
-        let pool = ThreadPool::new(1, "Network");
-        info!("[STARTUP] Network thread pool created with 1 worker");
+        let pool = Arc::new(ThreadPool::new(2, "Plugin"));
+        info!("[STARTUP] Plugin thread pool created with 2 workers");
         Self { pool }
     }
 
