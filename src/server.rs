@@ -110,7 +110,6 @@ impl MinecraftServer {
                     let chunk_gen_pool = chunk_gen_pool.clone();
                     let file_io_pool = file_io_pool.clone();
                     let network_pool = network_pool.clone();
-                    let packet_logger = packet_logger.clone();
                     tokio::spawn(async move {
                         if let Err(e) = handle_client(
                             socket,

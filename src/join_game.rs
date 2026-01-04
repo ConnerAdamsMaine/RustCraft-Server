@@ -30,7 +30,7 @@ impl JoinGameHandler {
         Ok(())
     }
 
-    pub async fn send_disconnect(stream: &mut TcpStream, reason: &str, packet_logger: &PacketLogger) -> Result<()> {
+    pub async fn send_disconnect(stream: &mut TcpStream, reason: &str) -> Result<()> {
         let mut writer = PacketWriter::new();
 
         // Write JSON chat message
@@ -47,7 +47,7 @@ impl JoinGameHandler {
         frame.extend_from_slice(&packet_id);
         frame.extend_from_slice(&packet_data);
 
-        let _ = packet_logger.log_server_packet(&frame);
+        let _ = &crate::LOGGER.log_server_packet(&frame);
 
         if let Err(e) = stream.write_all(&frame).await {
             warn!("Failed to send disconnect: {}", e);

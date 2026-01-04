@@ -24,7 +24,7 @@ pub struct Player {
     pub y:         f64,
     pub z:         f64,
     loaded_chunks: std::collections::HashSet<ChunkPos>,
-    packet_logger: &'static crate::PacketLogger, // PacketLogger,
+    // packet_logger: &'static crate::PacketLogger, // PacketLogger,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -46,7 +46,7 @@ impl Player {
             y: 64.0,
             z: 0.0,
             loaded_chunks: std::collections::HashSet::new(),
-            packet_logger: &crate::LOGGER,
+            // packet_logger: &crate::LOGGER,
         })
     }
 
