@@ -1,0 +1,154 @@
+use crate::chunk::{Chunk, ChunkPos, BlockType};
+use crate::terrain_gen::{HeightMap, BiomeMap, Biome};
+use std::sync::Arc;
+use parking_lot::RwLock;
+
+pub struct ChunkGenerator {
+    seed: u64,
+    height_map: Arc<RwLock<Option<HeightMap>>>,
+    biome_map: Arc<RwLock<Option<BiomeMap>>>,
+}
+
+impl ChunkGenerator {
+    pub fn new(seed: u64) -> Self {
+        Self {
+            seed,
+            height_map: Arc::new(RwLock::new(None)),
+            biome_map: Arc::new(RwLock::new(None)),
+        }
+    }
+
+    pub fn generate(&self, pos: ChunkPos) -> Chunk {
+        // Lazy initialization of height map
+        {
+            let mut hm = self.height_map.write();
+            if hm.is_none() {
+                *hm = Some(HeightMap::new(512, 512, self.seed));
+            }
+        }
+
+        // Lazy initialization of biome map
+        {
+            let mut bm = self.biome_map.write();
+            if bm.is_none() {
+                let hm_lock = self.height_map.read();
+                if let Some(hm) = hm_lock.as_ref() {
+                    *bm = Some(BiomeMap::from_height_map(hm));
+                }
+            }
+        }
+
+        let mut chunk = Chunk::new(pos);
+
+        let hm_lock = self.height_map.read();
+        let bm_lock = self.biome_map.read();
+
+        if let (Some(height_map), Some(biome_map)) = (hm_lock.as_ref(), bm_lock.as_ref()) {
+            for x in 0..16 {
+                for z in 0..16 {
+                    let world_x = (pos.x * 16 + x as i32) as usize;
+                    let world_z = (pos.z * 16 + z as i32) as usize;
+
+                    let elevation = height_map.get(world_x, world_z);
+                    let biome = biome_map.get(world_x, world_z);
+
+                    let height = self.elevation_to_block_height(elevation);
+
+                    self.fill_column(&mut chunk, x, z, height, biome, elevation);
+                }
+            }
+        }
+
+        chunk
+    }
+
+    fn elevation_to_block_height(&self, elevation: f64) -> usize {
+        // Map [-1, 1] to [10, 200]
+        let normalized = (elevation + 1.0) / 2.0; // [0, 1]
+        ((normalized * 190.0) + 10.0) as usize
+    }
+
+    fn fill_column(&self, chunk: &mut Chunk, x: usize, z: usize, height: usize, biome: Biome, elevation: f64) {
+        for y in 0..height.min(256) {
+            let block = self.get_block_for_biome(y, height, biome, elevation);
+            chunk.set_block(x, y, z, block);
+        }
+
+        // Water at sea level (elevation -0.05)
+        let sea_level = self.elevation_to_block_height(-0.05);
+        if height < sea_level {
+            for y in height..sea_level.min(256) {
+                chunk.set_block(x, y, z, BlockType::Water);
+            }
+        }
+    }
+
+    fn get_block_for_biome(&self, y: usize, height: usize, biome: Biome, _elevation: f64) -> BlockType {
+        if y >= height {
+            return BlockType::Air;
+        }
+
+        let depth = height - y;
+
+        match biome {
+            Biome::Ocean => BlockType::Stone,
+            Biome::Beach => {
+                if depth <= 2 {
+                    BlockType::Sand
+                } else {
+                    BlockType::Stone
+                }
+            }
+            Biome::Plains => {
+                if depth == 0 {
+                    BlockType::Grass
+                } else if depth <= 3 {
+                    BlockType::Dirt
+                } else {
+                    BlockType::Stone
+                }
+            }
+            Biome::Forest => {
+                if depth == 0 {
+                    BlockType::Grass
+                } else if depth <= 4 {
+                    BlockType::Dirt
+                } else {
+                    BlockType::Stone
+                }
+            }
+            Biome::Mountain => {
+                if depth <= 2 {
+                    BlockType::Stone
+                } else if depth <= 6 {
+                    BlockType::Cobblestone
+                } else {
+                    BlockType::Stone
+                }
+            }
+            Biome::Snow => {
+                if depth == 0 {
+                    BlockType::Grass // White snow-like top
+                } else if depth <= 2 {
+                    BlockType::Dirt
+                } else {
+                    BlockType::Stone
+                }
+            }
+            Biome::SnowMountain => {
+                if depth <= 1 {
+                    BlockType::Stone
+                } else {
+                    BlockType::Cobblestone
+                }
+            }
+            Biome::Desert => {
+                if depth <= 4 {
+                    BlockType::Sand
+                } else {
+                    BlockType::Stone
+                }
+            }
+        }
+    }
+}

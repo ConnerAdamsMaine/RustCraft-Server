@@ -1,0 +1,176 @@
+use std::sync::Arc;
+use std::sync::mpsc::{channel, Sender};
+use std::thread;
+use std::marker::PhantomData;
+use anyhow::Result;
+use tracing::info;
+
+/// A generic thread pool that processes tasks of type T
+pub struct ThreadPool<T: Send + 'static> {
+    workers: Vec<Worker<T>>,
+    sender: Sender<Option<Box<dyn FnOnce() + Send>>>,
+}
+
+struct Worker<T> {
+    _id: usize,
+    _thread: Option<thread::JoinHandle<()>>,
+    _phantom: PhantomData<T>,
+}
+
+impl<T: Send + 'static> ThreadPool<T> {
+    pub fn new(num_threads: usize, name: &str) -> Self {
+        assert!(num_threads > 0, "Pool must have at least 1 thread");
+        
+        let (sender, receiver) = channel::<Option<Box<dyn FnOnce() + Send>>>();
+        let receiver = Arc::new(std::sync::Mutex::new(receiver));
+
+        let mut workers = Vec::with_capacity(num_threads);
+
+        for id in 0..num_threads {
+            let receiver = Arc::clone(&receiver);
+            let thread_name = format!("{}-{}", name, id);
+            
+            let thread = thread::Builder::new()
+                .name(thread_name)
+                .spawn(move || loop {
+                    let task = {
+                        let receiver = receiver.lock().unwrap();
+                        receiver.recv().unwrap()
+                    };
+
+                    match task {
+                        Some(job) => job(),
+                        None => break, // Shutdown signal
+                    }
+                })
+                .unwrap();
+
+            workers.push(Worker {
+                _id: id,
+                _thread: Some(thread),
+                _phantom: PhantomData,
+            });
+        }
+
+        ThreadPool { workers, sender }
+    }
+
+    pub fn execute<F>(&self, f: F) -> Result<()>
+    where
+        F: FnOnce() + Send + 'static,
+    {
+        self.sender
+            .send(Some(Box::new(f)))
+            .map_err(|e| anyhow::anyhow!("Failed to send task to thread pool: {}", e))
+    }
+}
+
+impl<T> Drop for ThreadPool<T>
+where
+    T: Send + 'static,
+{
+    fn drop(&mut self) {
+        // Send shutdown signal to all workers
+        for _ in 0..self.workers.len() {
+            self.sender.send(None).unwrap();
+        }
+
+        // Wait for all workers to finish
+        for worker in &mut self.workers {
+            if let Some(thread) = worker._thread.take() {
+                thread.join().unwrap();
+            }
+        }
+    }
+}
+
+/// Thread pool specifically for chunk generation (4 threads)
+pub struct ChunkGenThreadPool {
+    pool: ThreadPool<ChunkGenTask>,
+}
+
+pub struct ChunkGenTask;
+
+impl ChunkGenThreadPool {
+    pub fn new() -> Self {
+        let pool = ThreadPool::new(4, "ChunkGen");
+        info!("[STARTUP] Chunk generation thread pool created with 4 workers");
+        Self { pool }
+    }
+
+    pub fn execute<F>(&self, f: F) -> Result<()>
+    where
+        F: FnOnce() + Send + 'static,
+    {
+        self.pool.execute(f)
+    }
+}
+
+/// Thread pool for file I/O operations (1 thread)
+pub struct FileIOThreadPool {
+    pool: ThreadPool<FileIOTask>,
+}
+
+pub struct FileIOTask;
+
+impl FileIOThreadPool {
+    pub fn new() -> Self {
+        let pool = ThreadPool::new(1, "FileIO");
+        info!("[STARTUP] File I/O thread pool created with 1 worker");
+        Self { pool }
+    }
+
+    pub fn execute<F>(&self, f: F) -> Result<()>
+    where
+        F: FnOnce() + Send + 'static,
+    {
+        self.pool.execute(f)
+    }
+}
+
+/// Thread pool for networking operations (1 thread)
+pub struct NetworkThreadPool {
+    pool: ThreadPool<NetworkTask>,
+}
+
+pub struct NetworkTask;
+
+impl NetworkThreadPool {
+    pub fn new() -> Self {
+        let pool = ThreadPool::new(1, "Network");
+        info!("[STARTUP] Network thread pool created with 1 worker");
+        Self { pool }
+    }
+
+    pub fn execute<F>(&self, f: F) -> Result<()>
+    where
+        F: FnOnce() + Send + 'static,
+    {
+        self.pool.execute(f)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+
+    #[test]
+    fn test_chunk_gen_pool() {
+        let pool = ChunkGenThreadPool::new();
+        let counter = Arc::new(AtomicUsize::new(0));
+
+        for _ in 0..10 {
+            let c = Arc::clone(&counter);
+            pool.execute(move || {
+                c.fetch_add(1, Ordering::SeqCst);
+            })
+            .unwrap();
+        }
+
+        // Give threads time to complete
+        thread::sleep(std::time::Duration::from_millis(100));
+        assert_eq!(counter.load(Ordering::SeqCst), 10);
+    }
+}
