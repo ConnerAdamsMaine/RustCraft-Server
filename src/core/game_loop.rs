@@ -26,12 +26,13 @@ impl GameLoop {
             self.tick_count += 1;
             self.last_tick = now;
 
+            // TODO: @update_fns : Implement the actual update functions
             // Perform tick updates
-            self.update_players();
-            self.update_entities();
-            self.update_physics();
+            // self.update_players();
+            // self.update_entities();
+            // self.update_physics();
 
-            tracing::debug!("Tick {}", self.tick_count);
+            tracing::trace!("Tick {}", self.tick_count);
         }
 
         Ok(())
@@ -39,14 +40,17 @@ impl GameLoop {
 
     fn update_players(&mut self) {
         // Update player positions, health, etc.
+        todo!("Need to implement player updates");
     }
 
     fn update_entities(&mut self) {
         // Update mobs, projectiles, etc.
+        todo!("Need to implement entity updates");
     }
 
     fn update_physics(&mut self) {
         // Apply gravity, collisions, etc.
+        todo!("Need to implement physics updates");
     }
 
     pub fn tick_count(&self) -> u64 {
