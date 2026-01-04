@@ -24,7 +24,6 @@ md5                = "0.7"
 opt-level        = 1
 codegen-units    = 256
 incremental      = true
-rustflags        = [ "-Zthreads=16" ]
 codegen-backend  = "cranelift"
 debug            = "line-tables-only"
 debug-assertions = true
