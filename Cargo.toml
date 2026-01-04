@@ -1,4 +1,4 @@
-cargo-features = [ "codegen-backend", "profile-rustflags", "trim-paths" ]
+cargo-features = [ "codegen-backend", "trim-paths" ]
 
 [package]
 name    = "rustcraft"
@@ -41,7 +41,6 @@ trim-paths       = "none"
 opt-level        = 3
 codegen-units    = 1
 incremental      = false
-rustflags        = [ "-Zthreads=16" ]
 codegen-backend  = "cranelift"                 # May break deps.
 debug            = "none"
 debug-assertions = false
