@@ -10,6 +10,7 @@ use crate::terrain::ChunkPos;
 use crate::chunk::ChunkStorage;
 use crate::error_tracker::{ErrorKey, ErrorTracker};
 use crate::player::join_game::JoinGameHandler;
+use crate::player::configuration::ConfigurationHandler;
 use crate::network::LoginHandler;
 use crate::network::protocol::read_varint;
 use crate::core::thread_pool::{ChunkGenThreadPool, FileIOThreadPool, NetworkThreadPool};
@@ -105,15 +106,19 @@ impl Player {
             self.z
         );
 
-        // Send configuration finish packet to transition to Play state
-        tracing::debug!("[PLAYER] Sending Configuration Finish packet");
-        if let Err(e) = JoinGameHandler::send_configuration_finish(&mut self.socket).await {
-            tracing::error!("[PLAYER] Failed to send config finish to {}: {}", self.username, e);
-            let key = ErrorKey::new("CONFIG", "finish_failed");
+        // Handle Configuration phase
+        tracing::debug!("[PLAYER] Starting configuration phase");
+        if let Err(e) = ConfigurationHandler::handle_configuration(&mut self.socket).await {
+            tracing::error!("[PLAYER] Configuration phase failed for {}: {}", self.username, e);
+            let key = ErrorKey::new("CONFIG", format!("config_failed: {}", e));
             error_tracker.record_error(key);
             return Err(e);
         }
-        tracing::debug!("[PLAYER] Configuration Finish sent");
+        tracing::debug!("[PLAYER] Configuration phase complete");
+        
+        // Transition to Play state
+        self.state = PlayerState::Play;
+        tracing::debug!("[PLAYER] Player state set to Play");
 
         // Send join game packet
         tracing::debug!("[PLAYER] Sending Join Game packet");
