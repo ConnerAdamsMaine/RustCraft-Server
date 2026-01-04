@@ -253,6 +253,59 @@ impl LoginHandler {
         Ok(())
     }
 
+    async fn read_login_acknowledged(&mut self) -> Result<()> {
+        let mut length_buf = [0u8; 5];
+        
+        // Read packet length
+        let mut bytes_read = 0;
+        loop {
+            let n = self.stream.read(&mut length_buf[bytes_read..bytes_read + 1]).await?;
+            if n == 0 {
+                return Err(anyhow!("Connection closed"));
+            }
+            
+            if length_buf[bytes_read] & 0x80 == 0 {
+                bytes_read += 1;
+                break;
+            }
+            bytes_read += 1;
+            if bytes_read >= 5 {
+                return Err(anyhow!("Packet length too long"));
+            }
+        }
+
+        let packet_length = read_varint(&mut std::io::Cursor::new(&length_buf[..bytes_read]))? as usize;
+        
+        // Read packet data
+        let mut packet_data = vec![0u8; packet_length];
+        self.stream.read_exact(&mut packet_data).await?;
+
+        let mut reader = PacketReader::new(&packet_data);
+        let packet_id = reader.read_varint()?;
+
+        // Packet 0x03 is Login Acknowledged in 1.21.7
+        if packet_id != 0x03 {
+            warn!("Expected Login Acknowledged packet (0x03), got {:#x}", packet_id);
+        }
+
+        Ok(())
+    }
+
+    async fn send_config_finish(&mut self) -> Result<()> {
+        // Configuration Finish packet (0x02) - transitions to Play state
+        // This packet has no data, just the ID
+        let packet_id = write_varint(0x02);
+        
+        let mut frame = Vec::new();
+        frame.extend_from_slice(&write_varint(packet_id.len() as i32));
+        frame.extend_from_slice(&packet_id);
+
+        self.stream.write_all(&frame).await?;
+        self.stream.flush().await?;
+
+        Ok(())
+    }
+
     pub fn get_stream(self) -> TcpStream {
         self.stream
     }
