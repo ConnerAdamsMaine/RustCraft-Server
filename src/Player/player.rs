@@ -6,14 +6,15 @@ use tokio::io::AsyncReadExt;
 use tokio::net::TcpStream;
 use uuid::Uuid;
 
-use crate::chunk::ChunkPos;
-use crate::chunk_storage::ChunkStorage;
+use crate::terrain::ChunkPos;
+use crate::chunk::ChunkStorage;
 use crate::error_tracker::{ErrorKey, ErrorTracker};
-use crate::join_game::JoinGameHandler;
-use crate::login::LoginHandler;
-use crate::protocol::read_varint;
-use crate::thread_pool::{ChunkGenThreadPool, FileIOThreadPool, NetworkThreadPool};
-use crate::{chunk_sender, movement_handler};
+use crate::player::join_game::JoinGameHandler;
+use crate::network::LoginHandler;
+use crate::network::protocol::read_varint;
+use crate::core::thread_pool::{ChunkGenThreadPool, FileIOThreadPool, NetworkThreadPool};
+use crate::chunk::chunk_sender;
+use crate::player::movement_handler;
 
 pub struct Player {
     pub uuid:      Uuid,
@@ -273,6 +274,7 @@ impl Player {
                 // Log the full packet (length + data)
                 let mut full_packet = length_bytes[..n].to_vec();
                 full_packet.extend_from_slice(&packet_data);
+                #[cfg(feature = "dev-sdk")]
                 let _ = &crate::LOGGER.log_client_packet(&full_packet);
 
                 // Parse packet ID

@@ -5,7 +5,7 @@ use tracing::warn;
 use uuid::Uuid;
 
 // use crate::packet_logger::PacketLogger;
-use crate::protocol::{write_varint, ByteWritable, PacketWriter};
+use crate::network::protocol::{write_varint, ByteWritable, PacketWriter};
 
 pub struct JoinGameHandler;
 
@@ -20,8 +20,7 @@ impl JoinGameHandler {
         frame.extend_from_slice(&write_varint(packet_length));
         frame.extend_from_slice(&packet_id);
 
-        // let _ = packet_logger.log_server_packet(&frame);
-
+        #[cfg(feature = "dev-sdk")]
         let _ = crate::LOGGER.log_server_packet(&frame);
 
         stream.write_all(&frame).await?;
@@ -47,6 +46,7 @@ impl JoinGameHandler {
         frame.extend_from_slice(&packet_id);
         frame.extend_from_slice(&packet_data);
 
+        #[cfg(feature = "dev-sdk")]
         let _ = &crate::LOGGER.log_server_packet(&frame);
 
         if let Err(e) = stream.write_all(&frame).await {
@@ -124,6 +124,7 @@ impl JoinGameHandler {
         frame.extend_from_slice(&packet_id);
         frame.extend_from_slice(&packet_data);
 
+        #[cfg(feature = "dev-sdk")]
         let _ = &crate::LOGGER.log_server_packet(&frame);
 
         stream.write_all(&frame).await?;
@@ -169,6 +170,7 @@ impl JoinGameHandler {
         frame.extend_from_slice(&packet_id);
         frame.extend_from_slice(&packet_data);
 
+        #[cfg(feature = "dev-sdk")]
         let _ = &crate::LOGGER.log_server_packet(&frame);
 
         stream.write_all(&frame).await?;

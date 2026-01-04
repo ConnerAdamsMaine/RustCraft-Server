@@ -1,4 +1,4 @@
-use crate::noise;
+use crate::terrain::noise;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Biome {

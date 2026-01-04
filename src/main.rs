@@ -1,30 +1,13 @@
-mod cache;
-mod chunk;
-mod chunk_generator;
-mod chunk_protocol;
-mod chunk_sender;
-mod chunk_storage;
-mod error_tracker;
-mod game_loop;
-mod join_game;
-mod logging;
-mod login;
-mod movement_handler;
-mod noise;
-mod player;
-mod protocol;
-mod region;
-mod server;
-mod terrain_gen;
-mod thread_pool;
-mod world;
-
-use std::sync::{Arc, LazyLock};
+use std::sync::LazyLock;
 
 use anyhow::Result;
+use rustcraft::error_tracker::ErrorTracker;
+use rustcraft::core::server::MinecraftServer;
 
-use crate::logging::PacketLogger;
+#[cfg(feature = "dev-sdk")]
+use rustcraft::sdk::PacketLogger;
 
+#[cfg(feature = "dev-sdk")]
 pub static LOGGER: LazyLock<PacketLogger> =
     LazyLock::new(|| PacketLogger::new().expect("Failed to initialize PacketLogger"));
 
@@ -38,10 +21,10 @@ async fn main() -> Result<()> {
         .compact()
         .init();
 
-    let error_tracker = Arc::new(error_tracker::ErrorTracker::new());
+    let error_tracker = std::sync::Arc::new(ErrorTracker::new());
 
     // Start the Minecraft server
-    let server = server::MinecraftServer::new("127.0.0.1:25565", error_tracker.clone()).await?;
+    let server = MinecraftServer::new("127.0.0.1:25565", error_tracker.clone()).await?;
     server.run().await?;
 
     Ok(())

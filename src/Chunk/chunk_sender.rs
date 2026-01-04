@@ -2,9 +2,9 @@ use anyhow::Result;
 use tokio::net::TcpStream;
 use tracing::debug;
 
-use crate::chunk::{Chunk, ChunkPos};
-use crate::chunk_protocol::serialize_chunk;
-use crate::protocol::write_varint;
+use crate::terrain::{Chunk, ChunkPos};
+use crate::chunk::chunk_protocol::serialize_chunk;
+use crate::network::protocol::write_varint;
 
 /// Send a single chunk to a player
 pub async fn send_chunk(socket: &mut TcpStream, chunk: &Chunk) -> Result<()> {
@@ -34,7 +34,7 @@ pub async fn send_chunks(socket: &mut TcpStream, chunks: &[Chunk]) -> Result<()>
 /// Send chunks in a spiral pattern around player position
 pub async fn send_chunks_around_player(
     socket: &mut TcpStream,
-    chunk_storage: &crate::chunk_storage::ChunkStorage,
+    chunk_storage: &crate::chunk::ChunkStorage,
     chunk_x: i32,
     chunk_z: i32,
     radius: i32,

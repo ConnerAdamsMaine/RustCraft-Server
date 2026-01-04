@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use crate::protocol::PacketReader;
+use crate::network::protocol::PacketReader;
 
 /// Player movement packet types
 #[derive(Debug, Clone)]
