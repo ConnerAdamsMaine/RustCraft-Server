@@ -293,8 +293,17 @@ impl LoginHandler {
     async fn send_disconnect(&mut self, reason: &str) -> Result<()> {
         let mut writer = PacketWriter::new();
 
-        // Write JSON chat message
-        let json_message = format!(r#"{{"text":"{}"}}"#, reason.replace('"', "\\\""));
+        // Write JSON text component
+        // Escape JSON properly
+        let escaped_reason = reason
+            .replace('\\', "\\\\")
+            .replace('"', "\\\"")
+            .replace('\n', "\\n")
+            .replace('\r', "\\r")
+            .replace('\t', "\\t");
+        
+        let json_message = format!(r#"{{"text":"{}"}}"#, escaped_reason);
+        tracing::debug!("[LOGIN] Disconnect JSON: {}", json_message);
         writer.write_string(&json_message);
 
         let packet_data = writer.finish();
@@ -306,6 +315,7 @@ impl LoginHandler {
         frame.extend_from_slice(&packet_id);
         frame.extend_from_slice(&packet_data);
 
+        tracing::debug!("[LOGIN] Sending disconnect packet ({} bytes)", frame.len());
         self.stream.write_all(&frame).await?;
         self.stream.flush().await?;
 
