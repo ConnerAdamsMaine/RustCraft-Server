@@ -3,7 +3,10 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use anyhow::Result;
-use tracing::debug;
+use tracing::{debug, info};
+
+use crate::network::protocol::{read_varint, PacketReader};
+use std::io::Cursor;
 
 pub struct PacketLogger {
     packet_dir: PathBuf,
@@ -29,7 +32,7 @@ impl PacketLogger {
             }
         }
 
-        tracing::info!("[PACKET_LOG] Logger initialized, packets directory ready");
+        info!("[PACKET_LOG] Logger initialized, packets directory ready");
 
         Ok(Self {
             packet_dir,
@@ -43,7 +46,9 @@ impl PacketLogger {
         let path = self.packet_dir.join(&filename);
 
         fs::write(&path, data)?;
-        debug!("[PACKET_LOG] Logged client packet: {} ({} bytes)", filename, data.len());
+        
+        // Parse and display packet info
+        self.log_packet_details("CLIENT", count, data);
 
         Ok(())
     }
@@ -54,9 +59,91 @@ impl PacketLogger {
         let path = self.packet_dir.join(&filename);
 
         fs::write(&path, data)?;
-        debug!("[PACKET_LOG] Logged server packet: {} ({} bytes)", filename, data.len());
+        
+        // Parse and display packet info
+        self.log_packet_details("SERVER", count, data);
 
         Ok(())
+    }
+
+    fn log_packet_details(&self, direction: &str, count: usize, data: &[u8]) {
+        if data.is_empty() {
+            debug!("[PACKET_LOG:{}] #{:06} Empty packet ({} bytes)", direction, count, data.len());
+            return;
+        }
+
+        // Try to parse packet length and ID
+        match self.parse_packet(data) {
+            Some((packet_id, payload_len)) => {
+                info!(
+                    "[PACKET_LOG:{}] #{:06} Packet ID: 0x{:02x} | Total bytes: {} | Payload: {} bytes | Hex: {}",
+                    direction,
+                    count,
+                    packet_id,
+                    data.len(),
+                    payload_len,
+                    Self::hex_preview(data, 64)
+                );
+                debug!("[PACKET_LOG:{}] #{:06} Full hex: {}", direction, count, Self::hex_full(data));
+            }
+            None => {
+                info!(
+                    "[PACKET_LOG:{}] #{:06} Could not parse packet ({} bytes) | Hex: {}",
+                    direction,
+                    count,
+                    data.len(),
+                    Self::hex_preview(data, 64)
+                );
+            }
+        }
+    }
+
+    fn parse_packet(&self, data: &[u8]) -> Option<(i32, usize)> {
+        if data.is_empty() {
+            return None;
+        }
+
+        let mut cursor = Cursor::new(data);
+        
+        // Read packet length (varint)
+        let packet_length = match read_varint(&mut cursor) {
+            Ok(len) => len as usize,
+            Err(_) => return None,
+        };
+
+        let length_bytes = cursor.position() as usize;
+
+        // Read packet ID (varint)
+        let packet_id = match read_varint(&mut cursor) {
+            Ok(id) => id,
+            Err(_) => return None,
+        };
+
+        let id_bytes = cursor.position() as usize - length_bytes;
+        let payload_len = packet_length.saturating_sub(id_bytes);
+
+        Some((packet_id, payload_len))
+    }
+
+    fn hex_preview(data: &[u8], max_chars: usize) -> String {
+        let hex = Self::bytes_to_hex(data);
+        if hex.len() > max_chars {
+            format!("{}...", &hex[..max_chars])
+        } else {
+            hex
+        }
+    }
+
+    fn hex_full(data: &[u8]) -> String {
+        Self::bytes_to_hex(data)
+    }
+
+    fn bytes_to_hex(bytes: &[u8]) -> String {
+        bytes
+            .iter()
+            .map(|b| format!("{:02x}", b))
+            .collect::<Vec<_>>()
+            .join(" ")
     }
 }
 
