@@ -92,10 +92,13 @@ impl LoginHandler {
 
         info!("[LOGIN] Player '{}' (UUID: {}) logged in successfully", username, uuid);
 
-        // For 1.21.7+: Give client moment to send Login Acknowledged, but don't wait for it
-        // The client will transition to Configuration state after Login Success
-        // We'll skip the full configuration flow for now
-        tracing::debug!("[LOGIN] Login flow complete, returning to server");
+        // Wait for Login Acknowledged packet (required for 1.20.2+)
+        tracing::debug!("[LOGIN] Waiting for Login Acknowledged packet...");
+        if let Err(e) = self.read_login_acknowledged().await {
+            warn!("[LOGIN] Failed to receive Login Acknowledged: {}", e);
+            return Err(e);
+        }
+        tracing::debug!("[LOGIN] Login Acknowledged received");
 
         Ok(PlayerLogin { username, uuid })
     }
@@ -148,6 +151,47 @@ impl LoginHandler {
             return Err(anyhow!("Expected Status (1) or Login (2) state, got {}", next_state));
         }
 
+        Ok(())
+    }
+
+    async fn read_login_acknowledged(&mut self) -> Result<()> {
+        let mut length_buf = [0u8; 5];
+
+        // Read packet length
+        let mut bytes_read = 0;
+        loop {
+            let n = self
+                .stream
+                .read(&mut length_buf[bytes_read..bytes_read + 1])
+                .await?;
+            if n == 0 {
+                return Err(anyhow!("Connection closed during login acknowledged"));
+            }
+
+            if length_buf[bytes_read] & 0x80 == 0 {
+                bytes_read += 1;
+                break;
+            }
+            bytes_read += 1;
+            if bytes_read >= 5 {
+                return Err(anyhow!("Packet length too long"));
+            }
+        }
+
+        let packet_length = read_varint(&mut std::io::Cursor::new(&length_buf[..bytes_read]))? as usize;
+
+        // Read packet data
+        let mut packet_data = vec![0u8; packet_length];
+        self.stream.read_exact(&mut packet_data).await?;
+
+        let mut reader = PacketReader::new(&packet_data);
+        let packet_id = reader.read_varint()?;
+
+        if packet_id != 0x03 {
+            return Err(anyhow!("Expected Login Acknowledged packet (0x03), got {:#x}", packet_id));
+        }
+
+        // Login Acknowledged has no payload
         Ok(())
     }
 

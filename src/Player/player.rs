@@ -93,8 +93,8 @@ impl Player {
         self.uuid = player_login.uuid;
         self.username = player_login.username.clone();
         self.socket = login_handler.get_stream();
-        self.state = PlayerState::Play;
-        tracing::debug!("[PLAYER] Player state set to Play");
+        self.state = PlayerState::Login;
+        tracing::debug!("[PLAYER] Player state set to Login (awaiting configuration)");
 
         tracing::info!(
             "[PLAYER] '{}' ({}) joined at ({}, {}, {})",
