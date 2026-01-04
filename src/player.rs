@@ -52,7 +52,7 @@ impl Player {
 
     pub async fn handle(
         mut self,
-        chunk_storage: ChunkStorage,
+        _chunk_storage: ChunkStorage,
         error_tracker: Arc<ErrorTracker>,
         chunk_gen_pool: Arc<ChunkGenThreadPool>,
         _file_io_pool: Arc<FileIOThreadPool>,
