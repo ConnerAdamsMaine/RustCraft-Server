@@ -2,11 +2,12 @@ use crate::cache::LruCache;
 use crate::chunk::{Chunk, ChunkPos};
 use crate::chunk_generator::ChunkGenerator;
 use crate::region::{Region, RegionPos};
+use crate::thread_pool::ChunkGenThreadPool;
 use anyhow::Result;
 use parking_lot::RwLock;
 use std::fs;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, mpsc};
 use tracing::{debug, info, warn};
 
 const WORLD_DIR: &str = "world";
@@ -24,6 +25,7 @@ pub struct ChunkStorage {
     world_dir: PathBuf,
     chunk_generator: Arc<ChunkGenerator>,
     evictions: Arc<RwLock<usize>>,
+    chunk_gen_pool: Arc<ChunkGenThreadPool>,
 }
 
 impl ChunkStorage {
@@ -40,6 +42,8 @@ impl ChunkStorage {
             INITIAL_BUFFER_MB, MAX_BUFFER_MB, INITIAL_CAPACITY, MAX_CAPACITY
         );
 
+        let chunk_gen_pool = Arc::new(ChunkGenThreadPool::new());
+
         let storage = Self {
             cache: Arc::new(RwLock::new(LruCache::with_growth(
                 INITIAL_CAPACITY,
@@ -49,6 +53,7 @@ impl ChunkStorage {
             world_dir,
             chunk_generator,
             evictions: Arc::new(RwLock::new(0)),
+            chunk_gen_pool,
         };
 
         // Pregenerate 64x64 chunk area on startup
@@ -75,42 +80,41 @@ impl ChunkStorage {
 
         let start = std::time::Instant::now();
         let mut generated = 0;
+        let (tx, rx) = mpsc::channel();
 
-        // Generate a 64x64 area centered around origin
+        // Generate a 64x64 area centered around origin using thread pool
         for cx in -32..32 {
             for cz in -32..32 {
                 let pos = ChunkPos::new(cx, cz);
 
                 // Check if chunk exists on disk
                 if !self.chunk_exists_on_disk(pos)? {
-                    let chunk = self.chunk_generator.generate(pos);
-                    let (_, expanded, evicted) = {
-                        let mut cache = self.cache.write();
-                        cache.insert(pos, chunk)
-                    };
-                    
-                    if expanded {
-                        let cache = self.cache.read();
-                        debug!(
-                            "[CHUNK] Cache expanded to {} chunks during pregeneration",
-                            cache.current_capacity()
-                        );
-                    }
-                    
-                    if let Some(evicted_pos) = evicted {
-                        debug!("[CHUNK] Evicted {} during pregeneration", evicted_pos);
-                    }
-                    
+                    // Clone needed data for thread pool task
+                    let generator = Arc::clone(&self.chunk_generator);
+                    let tx = tx.clone();
+
+                    // Submit to thread pool
+                    self.chunk_gen_pool.execute(move || {
+                        let chunk = generator.generate(pos);
+                        let _ = tx.send((pos, chunk));
+                    })?;
+
                     generated += 1;
 
-                    // Save periodically to avoid memory bloat
+                    // Periodically receive and cache generated chunks
                     if generated % 256 == 0 {
-                        debug!("[CHUNK] Generated {} chunks so far", generated);
-                        self.flush_cache()?;
+                        debug!("[CHUNK] Submitted {} chunks to generation pool", generated);
+                        self.receive_and_cache_chunks(&rx)?;
                     }
                 }
             }
         }
+
+        // Drop the original sender so receiver knows when all tasks are done
+        drop(tx);
+
+        // Receive all remaining chunks
+        self.receive_and_cache_all_chunks(&rx)?;
 
         self.flush_cache()?;
 
@@ -125,6 +129,52 @@ impl ChunkStorage {
             cache.current_capacity()
         );
 
+        Ok(())
+    }
+
+    fn receive_and_cache_chunks(&self, rx: &mpsc::Receiver<(ChunkPos, Chunk)>) -> Result<()> {
+        // Receive chunks with a short timeout to avoid blocking
+        while let Ok((pos, chunk)) = rx.try_recv() {
+            let (_, expanded, evicted) = {
+                let mut cache = self.cache.write();
+                cache.insert(pos, chunk)
+            };
+
+            if expanded {
+                let cache = self.cache.read();
+                debug!(
+                    "[CHUNK] Cache expanded to {} chunks during pregeneration",
+                    cache.current_capacity()
+                );
+            }
+
+            if let Some(evicted_pos) = evicted {
+                debug!("[CHUNK] Evicted {} during pregeneration", evicted_pos);
+            }
+        }
+        Ok(())
+    }
+
+    fn receive_and_cache_all_chunks(&self, rx: &mpsc::Receiver<(ChunkPos, Chunk)>) -> Result<()> {
+        // Receive all remaining chunks from the channel
+        while let Ok((pos, chunk)) = rx.recv() {
+            let (_, expanded, evicted) = {
+                let mut cache = self.cache.write();
+                cache.insert(pos, chunk)
+            };
+
+            if expanded {
+                let cache = self.cache.read();
+                debug!(
+                    "[CHUNK] Cache expanded to {} chunks during pregeneration",
+                    cache.current_capacity()
+                );
+            }
+
+            if let Some(evicted_pos) = evicted {
+                debug!("[CHUNK] Evicted {} during pregeneration", evicted_pos);
+            }
+        }
         Ok(())
     }
 
@@ -279,6 +329,7 @@ impl Clone for ChunkStorage {
             world_dir: self.world_dir.clone(),
             chunk_generator: self.chunk_generator.clone(),
             evictions: self.evictions.clone(),
+            chunk_gen_pool: self.chunk_gen_pool.clone(),
         }
     }
 }
