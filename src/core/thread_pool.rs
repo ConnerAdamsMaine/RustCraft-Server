@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 use std::sync::mpsc::{channel, Sender};
 use std::sync::{Arc, Condvar, Mutex};
-use std::thread;
+use std::{alloc, thread};
 
 use anyhow::Result;
 use tracing::info;
@@ -14,12 +14,12 @@ pub struct ThreadPool<T: Send + 'static> {
 
 struct Worker<T> {
     _id:      usize,
-    _thread:  Option<thread::JoinHandle<()>>,
+    _thread:  Option<std::thread::JoinHandle<()>>,
     _phantom: PhantomData<T>,
 }
 
 impl<T: Send + 'static> ThreadPool<T> {
-    pub fn new(num_threads: usize, name: &str) -> Self {
+    pub fn new<S: AsRef<str>>(num_threads: usize, name: S) -> Self {
         assert!(num_threads > 0, "Pool must have at least 1 thread");
 
         let (sender, receiver) = channel::<Option<Box<dyn FnOnce() + Send>>>();
@@ -29,7 +29,7 @@ impl<T: Send + 'static> ThreadPool<T> {
 
         for id in 0..num_threads {
             let receiver = Arc::clone(&receiver);
-            let thread_name = format!("{}-{}", name, id);
+            let thread_name = format!("{}-{}", name.as_ref(), id);
 
             let thread = thread::Builder::new()
                 .name(thread_name)
@@ -91,6 +91,7 @@ where
 #[derive(Clone)]
 pub struct ChunkGenThreadPool {
     pool:       Arc<ThreadPool<ChunkGenTask>>,
+    // PERF: @atomic : Possible to do with an atomic bool instead of Mutex<bool>?
     init_state: Arc<(Mutex<bool>, Condvar)>,
 }
 

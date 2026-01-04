@@ -16,6 +16,8 @@ async fn main() -> Result<()> {
         .with_target(false)
         .with_thread_ids(false)
         .with_thread_names(false)
+        .with_line_number(true)
+        .with_max_level(tracing::Level::DEBUG)
         .compact()
         .init();
 
