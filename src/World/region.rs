@@ -1,7 +1,7 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-use crate::terrain::{BlockType, Chunk, ChunkPos};
+use crate::Terrain::{BlockType, Chunk, ChunkPos};
 
 const REGION_SIZE: i32 = 32;
 const MAX_CHUNKS: i32 = 10240;

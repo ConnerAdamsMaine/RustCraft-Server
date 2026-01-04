@@ -5,12 +5,12 @@ use anyhow::Result;
 use tokio::net::{TcpListener, TcpStream};
 use tracing::{error, info};
 
-use crate::terrain::ChunkGenerator;
-use crate::chunk::ChunkStorage;
+use crate::Terrain::ChunkGenerator;
+use crate::Chunk::ChunkStorage;
 use crate::error_tracker::ErrorTracker;
-use crate::core::game_loop::GameLoop;
-use crate::player::Player;
-use crate::core::thread_pool::{ChunkGenThreadPool, FileIOThreadPool, NetworkThreadPool};
+use crate::Core::game_loop::GameLoop;
+use crate::Player::Player;
+use crate::Core::thread_pool::{ChunkGenThreadPool, FileIOThreadPool, NetworkThreadPool};
 
 pub struct MinecraftServer {
     listener:       TcpListener,
@@ -75,7 +75,7 @@ impl MinecraftServer {
                 // Generate 16x16 chunk grid around origin
                 for x in -8..8 {
                     for z in -8..8 {
-                        let chunk_pos = crate::terrain::ChunkPos::new(x, z);
+                        let chunk_pos = crate::Terrain::ChunkPos::new(x, z);
                         // Queue chunk generation through the chunk storage
                         let _ = chunk_storage_clone.get_chunk(chunk_pos);
                     }

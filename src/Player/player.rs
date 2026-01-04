@@ -6,16 +6,16 @@ use tokio::io::AsyncReadExt;
 use tokio::net::TcpStream;
 use uuid::Uuid;
 
-use crate::terrain::ChunkPos;
-use crate::chunk::ChunkStorage;
+use crate::Terrain::ChunkPos;
+use crate::Chunk::ChunkStorage;
 use crate::error_tracker::{ErrorKey, ErrorTracker};
-use crate::player::join_game::JoinGameHandler;
-use crate::player::configuration::ConfigurationHandler;
-use crate::network::LoginHandler;
-use crate::network::protocol::read_varint;
-use crate::core::thread_pool::{ChunkGenThreadPool, FileIOThreadPool, NetworkThreadPool};
-use crate::chunk::chunk_sender;
-use crate::player::movement_handler;
+use crate::Player::join_game::JoinGameHandler;
+use crate::Player::configuration::ConfigurationHandler;
+use crate::Network::LoginHandler;
+use crate::Network::protocol::read_varint;
+use crate::Core::thread_pool::{ChunkGenThreadPool, FileIOThreadPool, NetworkThreadPool};
+use crate::Chunk::chunk_sender;
+use crate::Player::movement_handler;
 
 pub struct Player {
     pub uuid:      Uuid,
