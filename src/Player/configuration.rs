@@ -75,47 +75,71 @@ impl ConfigurationHandler {
     }
 
     async fn read_acknowledge_finish_configuration(stream: &mut TcpStream) -> Result<()> {
-        let mut length_buf = [0u8; 5];
-
-        // Read packet length
-        let mut bytes_read = 0;
+        // Client may send optional packets before Acknowledge Finish Configuration
+        // Valid packets in Configuration state (serverbound):
+        // 0x00 = Client Information
+        // 0x01 = Serverbound Plugin Message
+        // 0x02 = Serverbound Known Packs
+        // 0x03 = Acknowledge Finish Configuration
+        
         loop {
-            let n = stream
-                .read(&mut length_buf[bytes_read..bytes_read + 1])
-                .await?;
-            if n == 0 {
-                return Err(anyhow!("Connection closed during acknowledge finish configuration"));
-            }
+            let mut length_buf = [0u8; 5];
 
-            if length_buf[bytes_read] & 0x80 == 0 {
+            // Read packet length
+            let mut bytes_read = 0;
+            loop {
+                let n = stream
+                    .read(&mut length_buf[bytes_read..bytes_read + 1])
+                    .await?;
+                if n == 0 {
+                    return Err(anyhow!("Connection closed during acknowledge finish configuration"));
+                }
+
+                if length_buf[bytes_read] & 0x80 == 0 {
+                    bytes_read += 1;
+                    break;
+                }
                 bytes_read += 1;
-                break;
+                if bytes_read >= 5 {
+                    return Err(anyhow!("Packet length too long"));
+                }
             }
-            bytes_read += 1;
-            if bytes_read >= 5 {
-                return Err(anyhow!("Packet length too long"));
+
+            let packet_length =
+                read_varint(&mut std::io::Cursor::new(&length_buf[..bytes_read]))? as usize;
+
+            // Read packet data
+            let mut packet_data = vec![0u8; packet_length];
+            stream.read_exact(&mut packet_data).await?;
+
+            let mut reader = PacketReader::new(&packet_data);
+            let packet_id = reader.read_varint()?;
+
+            match packet_id {
+                0x00 => {
+                    // Client Information - optional, skip it
+                    debug!("[CONFIG] Received Client Information (0x00)");
+                }
+                0x01 => {
+                    // Serverbound Plugin Message - optional, skip it
+                    debug!("[CONFIG] Received Serverbound Plugin Message (0x01)");
+                }
+                0x02 => {
+                    // Serverbound Known Packs - optional, skip it
+                    debug!("[CONFIG] Received Serverbound Known Packs (0x02)");
+                }
+                0x03 => {
+                    // Acknowledge Finish Configuration - this is what we're waiting for
+                    debug!("[CONFIG] Acknowledge Finish Configuration received");
+                    return Ok(());
+                }
+                _ => {
+                    return Err(anyhow!(
+                        "Unexpected packet in Configuration state: {:#x}",
+                        packet_id
+                    ));
+                }
             }
         }
-
-        let packet_length =
-            read_varint(&mut std::io::Cursor::new(&length_buf[..bytes_read]))? as usize;
-
-        // Read packet data
-        let mut packet_data = vec![0u8; packet_length];
-        stream.read_exact(&mut packet_data).await?;
-
-        let mut reader = PacketReader::new(&packet_data);
-        let packet_id = reader.read_varint()?;
-
-        // Acknowledge Finish Configuration should be 0x03 (serverbound)
-        if packet_id != 0x03 {
-            return Err(anyhow!(
-                "Expected Acknowledge Finish Configuration packet (0x03), got {:#x}",
-                packet_id
-            ));
-        }
-
-        debug!("[CONFIG] Acknowledge Finish Configuration received");
-        Ok(())
     }
 }
