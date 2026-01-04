@@ -13,9 +13,9 @@ impl ConfigurationHandler {
     pub async fn handle_configuration(stream: &mut TcpStream) -> Result<()> {
         debug!("[CONFIG] Starting configuration phase");
 
-        // Send Registry Data packet - minimal required registries
-        // For 1.21, we need at least: damage_type, biome, dimension_type, trim_material, trim_pattern
-        Self::send_registry_data(stream).await?;
+        // TODO: Send Registry Data packets with proper NBT encoding
+        // For now, we skip this and let the client handle minimal registries
+        // Required registries: minecraft:dimension_type, minecraft:damage_type, etc.
 
         debug!("[CONFIG] Sending Finish Configuration");
         Self::send_finish_configuration(stream).await?;
@@ -27,36 +27,7 @@ impl ConfigurationHandler {
         Ok(())
     }
 
-    async fn send_registry_data(stream: &mut TcpStream) -> Result<()> {
-        // Registry Data packet (0x07 in Configuration state)
-        // This is a complex packet with NBT data
-        // For now, send a minimal version with empty registries
-        
-        let mut writer = PacketWriter::new();
-        
-        // Registry ID (string)
-        writer.write_string("minecraft:root");
-        
-        // Has entries (boolean) - true
-        writer.write_bool(true);
-        
-        // Count (varint) - 0 for empty
-        writer.write_varint(0);
-        
-        let packet_data = writer.finish();
-        let packet_id = write_varint(0x07);
 
-        let mut frame = Vec::new();
-        frame.extend_from_slice(&write_varint((packet_id.len() + packet_data.len()) as i32));
-        frame.extend_from_slice(&packet_id);
-        frame.extend_from_slice(&packet_data);
-
-        stream.write_all(&frame).await?;
-        stream.flush().await?;
-
-        debug!("[CONFIG] Registry Data sent");
-        Ok(())
-    }
 
     async fn send_finish_configuration(stream: &mut TcpStream) -> Result<()> {
         // Finish Configuration packet (0x03 in Configuration state)
