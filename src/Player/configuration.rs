@@ -3,7 +3,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tracing::debug;
 
-use crate::network::protocol::{read_varint, write_varint, PacketReader, PacketWriter};
+use crate::network::protocol::{read_varint, write_varint, ByteWritable, PacketReader, PacketWriter};
 
 pub struct ConfigurationHandler;
 
