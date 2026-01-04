@@ -3,7 +3,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tracing::debug;
 
-use crate::network::protocol::{read_varint, write_varint, ByteWritable, PacketReader, PacketWriter};
+use crate::network::protocol::{read_varint, write_varint, ByteWritable, PacketReader, PacketWriter, NBTBuilder};
 
 pub struct ConfigurationHandler;
 
@@ -13,9 +13,9 @@ impl ConfigurationHandler {
     pub async fn handle_configuration(stream: &mut TcpStream) -> Result<()> {
         debug!("[CONFIG] Starting configuration phase");
 
-        // TODO: Send Registry Data packets with proper NBT encoding
-        // For now, we skip this and let the client handle minimal registries
-        // Required registries: minecraft:dimension_type, minecraft:damage_type, etc.
+        // Send required Registry Data packets
+        // These define the game registries that client and server must agree on
+        Self::send_registry_data(stream).await?;
 
         debug!("[CONFIG] Sending Finish Configuration");
         Self::send_finish_configuration(stream).await?;
@@ -25,6 +25,128 @@ impl ConfigurationHandler {
 
         debug!("[CONFIG] Configuration phase complete");
         Ok(())
+    }
+
+    /// Send Registry Data packets for critical registries
+    /// Registry Data packet structure (Protocol ID: 0x07 in Configuration state):
+    /// - Registry ID (Identifier): The registry name (e.g., "minecraft:dimension_type")
+    /// - Entries (Prefixed Array):
+    ///   - Entry ID (Identifier): The entry name (e.g., "minecraft:overworld")
+    ///   - Data (Prefixed Optional NBT): Entry data in NBT format (or null if from known packs)
+    async fn send_registry_data(stream: &mut TcpStream) -> Result<()> {
+        // Send minimal required registries for basic functionality
+        // For a full server, you'd need to send ALL synchronized registries
+        let registries = vec![
+            ("minecraft:dimension_type", Self::get_dimension_type_registry()),
+            ("minecraft:damage_type", Self::get_damage_type_registry()),
+        ];
+
+        for (registry_id, entries) in registries {
+            Self::send_single_registry(stream, registry_id, &entries).await?;
+        }
+
+        debug!("[CONFIG] Registry Data packets sent");
+        Ok(())
+    }
+
+    /// Send a single Registry Data packet
+    async fn send_single_registry(
+        stream: &mut TcpStream,
+        registry_id: &str,
+        entries: &[(String, Vec<u8>)],
+    ) -> Result<()> {
+        let mut writer = PacketWriter::new();
+
+        // Write Registry ID (as an Identifier)
+        writer.write_string(registry_id);
+
+        // Write Entries array
+        writer.write_varint(entries.len() as i32); // Array length
+
+        for (entry_id, nbt_data) in entries {
+            // Write Entry ID (as an Identifier)
+            writer.write_string(entry_id);
+
+            // Write Data (Prefixed Optional NBT)
+            // Write length followed by the NBT data
+            writer.write_varint(nbt_data.len() as i32);
+            writer.write_bytes(nbt_data);
+        }
+
+        let packet_data = writer.finish();
+        let packet_id = write_varint(0x07); // Registry Data packet ID
+
+        // Write packet: [length][id][data]
+        let mut frame = Vec::new();
+        frame.extend_from_slice(&write_varint((packet_id.len() + packet_data.len()) as i32));
+        frame.extend_from_slice(&packet_id);
+        frame.extend_from_slice(&packet_data);
+
+        stream.write_all(&frame).await?;
+        stream.flush().await?;
+        debug!("[CONFIG] Sent registry data for: {} ({} entries)", registry_id, entries.len());
+
+        Ok(())
+    }
+
+    /// Get the dimension_type registry entries with proper NBT data
+    fn get_dimension_type_registry() -> Vec<(String, Vec<u8>)> {
+        vec![
+            (
+                "minecraft:overworld".to_string(),
+                NBTBuilder::dimension_compound("overworld", 384, -64, true, false, false, true, 1.0),
+            ),
+            (
+                "minecraft:the_nether".to_string(),
+                NBTBuilder::dimension_compound("the_nether", 256, 0, false, true, true, false, 8.0),
+            ),
+            (
+                "minecraft:the_end".to_string(),
+                NBTBuilder::dimension_compound("the_end", 256, 0, false, false, false, false, 1.0),
+            ),
+        ]
+    }
+
+    /// Get the damage_type registry entries with proper NBT data
+    fn get_damage_type_registry() -> Vec<(String, Vec<u8>)> {
+        vec![
+            (
+                "minecraft:generic".to_string(),
+                NBTBuilder::damage_type_compound("generic", "when_caused_by_living_non_player", 0.0),
+            ),
+            (
+                "minecraft:player_attack".to_string(),
+                NBTBuilder::damage_type_compound("player_attack", "when_caused_by_living_non_player", 0.1),
+            ),
+            (
+                "minecraft:player_knockback".to_string(),
+                NBTBuilder::damage_type_compound("player_knockback", "when_caused_by_living_non_player", 0.1),
+            ),
+            (
+                "minecraft:world_border".to_string(),
+                NBTBuilder::damage_type_compound("world_border", "always", 0.0),
+            ),
+            (
+                "minecraft:falling".to_string(),
+                NBTBuilder::damage_type_compound("falling", "when_caused_by_living_non_player", 0.1),
+            ),
+            (
+                "minecraft:suffocation".to_string(),
+                NBTBuilder::damage_type_compound("suffocation", "always", 0.0),
+            ),
+            (
+                "minecraft:drowning".to_string(),
+                NBTBuilder::damage_type_compound("drowning", "always", 0.0),
+            ),
+            (
+                "minecraft:starving".to_string(),
+                NBTBuilder::damage_type_compound("starving", "always", 0.0),
+            ),
+            (
+                "minecraft:falling_anvil".to_string(),
+                NBTBuilder::damage_type_compound("falling_anvil", "when_caused_by_living_non_player", 0.1),
+            ),
+        ]
     }
 
 
