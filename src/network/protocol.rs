@@ -1,7 +1,20 @@
 use std::io::{Cursor, Read};
 
+use anyhow::{anyhow, Result};
 use bytes::{BufMut, Bytes, BytesMut};
 use uuid::Uuid;
+
+/// Validate a Minecraft identifier (resource location)
+/// Ensures the identifier contains no null bytes and only valid characters
+fn validate_identifier(id: &str) -> Result<()> {
+    if id.contains('\0') {
+        return Err(anyhow!("Identifier contains null byte: {:?}", id));
+    }
+    if !id.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '/' | '.' | '_' | '-' | ':')) {
+        return Err(anyhow!("Invalid identifier characters: {}", id));
+    }
+    Ok(())
+}
 
 /// Minecraft protocol packet structure
 pub struct Packet {
@@ -113,11 +126,11 @@ impl ByteWritable for PacketWriter {
     }
 
     fn write_short<N: Into<i16>>(&mut self, value: N) {
-        self.data.put_i16_ne(value.into());
+        self.data.extend_from_slice(&value.into().to_be_bytes());
     }
 
     fn write_int<N: Into<i32>>(&mut self, value: N) {
-        self.data.put_i32_ne(value.into());
+        self.data.extend_from_slice(&value.into().to_be_bytes());
     }
 
     fn write_long<N: Into<i64>>(&mut self, value: N) {
@@ -125,7 +138,7 @@ impl ByteWritable for PacketWriter {
     }
 
     fn write_float<N: Into<f32>>(&mut self, value: N) {
-        self.data.put_f32_ne(value.into());
+        self.data.extend_from_slice(&value.into().to_be_bytes());
     }
 
     fn write_double<N: Into<f64>>(&mut self, value: N) {
@@ -360,25 +373,29 @@ impl NBTBuilder {
     /// Create a damage type compound
     pub fn damage_type_compound(message_id: &str, scaling: &str, exhaustion: f32) -> Vec<u8> {
         let mut bytes = BytesMut::new();
-
+        
+        // Validate identifiers before processing
+        validate_identifier(message_id).expect("Invalid message_id identifier");
+        validate_identifier(scaling).expect("Invalid scaling identifier");
+        
         bytes.put_u8(0x0A); // TAG_Compound
-        bytes.put_i16(0); // empty root name
-
+        bytes.extend_from_slice(&(0i16).to_be_bytes());   // empty root name
+        
         // exhaustion: TAG_Float
         bytes.put_u8(0x05);
         bytes.extend_from_slice(b"\x00\x0bexhaustion");
-        bytes.put_f32(exhaustion);
-
+        bytes.extend_from_slice(&exhaustion.to_be_bytes());
+        
         // message_id: TAG_String
         bytes.put_u8(0x08);
         bytes.extend_from_slice(b"\x00\x0amessage_id");
-        bytes.put_i16(message_id.len() as i16);
+        bytes.extend_from_slice(&(message_id.len() as i16).to_be_bytes());
         bytes.extend_from_slice(message_id.as_bytes());
 
         // scaling: TAG_String
         bytes.put_u8(0x08);
         bytes.extend_from_slice(b"\x00\x07scaling");
-        bytes.put_i16(scaling.len() as i16);
+        bytes.extend_from_slice(&(scaling.len() as i16).to_be_bytes());
         bytes.extend_from_slice(scaling.as_bytes());
 
         // TAG_End
