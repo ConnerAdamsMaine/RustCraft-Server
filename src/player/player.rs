@@ -17,14 +17,16 @@ use crate::player::movement_handler;
 use crate::terrain::ChunkPos;
 
 pub struct Player {
-    pub uuid:      Uuid,
-    pub username:  String,
-    pub socket:    TcpStream,
-    pub state:     PlayerState,
-    pub x:         f64,
-    pub y:         f64,
-    pub z:         f64,
-    loaded_chunks: std::collections::HashSet<ChunkPos>,
+    pub uuid:         Uuid,
+    pub username:     String,
+    pub socket:       TcpStream,
+    pub state:        PlayerState,
+    pub x:            f64,
+    pub y:            f64,
+    pub z:            f64,
+    pub last_chunk_x: i32,
+    pub last_chunk_z: i32,
+    loaded_chunks:    std::collections::HashSet<ChunkPos>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -45,6 +47,8 @@ impl Player {
             x: 0.0,
             y: 64.0,
             z: 0.0,
+            last_chunk_x: 0,
+            last_chunk_z: 0,
             loaded_chunks: std::collections::HashSet::new(),
         })
     }
@@ -136,17 +140,46 @@ impl Player {
         }
         tracing::debug!("[PLAYER] Player Info Add sent");
 
-        // TODO: Load initial chunks around player and send to client
-        // Currently disabled - chunk serialization needs fixing for 1.21.7 protocol
-        // {
-        //     let socket = &mut self.socket;
-        //     if let Err(e) = Self::send_chunks_around_static(socket, &self.x, &self.y, &self.z, &chunk_storage, &mut self.loaded_chunks).await {
-        //         tracing::error!("[CHUNK] Failed to load initial chunks for {}: {}", self.username, e);
-        //         let key = ErrorKey::new("CHUNK", "load_failed");
-        //         error_tracker.record_error(key);
-        //         return Err(e);
-        //     }
-        // }
+        // Send spawn position packet
+        tracing::debug!("[PLAYER] Sending Spawn Position packet");
+        if let Err(e) = JoinGameHandler::send_spawn_position(&mut self.socket, 0, 64, 0, 0.0).await {
+            tracing::error!("[PLAYER] Failed to send spawn position: {}", e);
+            let key = ErrorKey::new("SPAWN_POS", "send_failed");
+            error_tracker.record_error(key);
+            return Err(e);
+        }
+        tracing::debug!("[PLAYER] Spawn Position sent");
+
+        // Send synchronize player position to initialize client position
+        tracing::debug!("[PLAYER] Sending initial player position sync");
+        if let Err(e) = crate::player::PlayStateHandler::send_synchronize_player_position(
+            &mut self.socket,
+            self.x,
+            self.y,
+            self.z,
+            0.0, // yaw
+            0.0, // pitch
+            0,   // teleport_id
+        )
+        .await
+        {
+            tracing::error!("[PLAYER] Failed to send player position sync: {}", e);
+            let key = ErrorKey::new("POSITION_SYNC", "send_failed");
+            error_tracker.record_error(key);
+            return Err(e);
+        }
+        tracing::debug!("[PLAYER] Player position sync sent");
+
+        // Load initial chunks around player and send to client
+        {
+            let socket = &mut self.socket;
+            if let Err(e) = Self::send_chunks_around_static(socket, &self.x, &self.y, &self.z, &_chunk_storage, &mut self.loaded_chunks).await {
+                tracing::error!("[CHUNK] Failed to load initial chunks for {}: {}", self.username, e);
+                let key = ErrorKey::new("CHUNK", "load_failed");
+                error_tracker.record_error(key);
+                return Err(e);
+            }
+        }
 
         tracing::info!("[PLAYER] {} ready to play at ({}, {}, {})", self.username, self.x, self.y, self.z);
         tracing::debug!("[PLAYER] Starting main game loop");
@@ -174,25 +207,32 @@ impl Player {
                 }
             }
 
-            // TODO: Update loaded chunks based on player position
-            // Currently disabled - chunk serialization needs fixing for 1.21.7 protocol
-            // if self.check_chunk_changed(&chunk_storage).await? {
-            //     // Player moved - send new chunks
-            //     let socket = &mut self.socket;
-            //     if let Err(e) = Self::send_chunks_around_static(socket, &self.x, &self.y, &self.z, &chunk_storage, &mut self.loaded_chunks).await {
-            //         tracing::warn!("[PLAYER] Failed to send chunks to {}: {}", self.username, e);
-            //     }
-            // }
+            // Update loaded chunks based on player position
+            if self.check_chunk_changed(&_chunk_storage).await? {
+                // Player moved to a different chunk - send new chunks
+                let socket = &mut self.socket;
+                if let Err(e) = Self::send_chunks_around_static(socket, &self.x, &self.y, &self.z, &_chunk_storage, &mut self.loaded_chunks).await {
+                    tracing::warn!("[PLAYER] Failed to send chunks to {}: {}", self.username, e);
+                }
+            }
 
             tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
         }
     }
 
-    async fn check_chunk_changed(&self, _chunk_storage: &ChunkStorage) -> Result<bool> {
-        // Check if player moved to a different chunk (simplified)
-        // In practice, this would track the last known chunk position
-        // For now, always return false since movement comes from client packets
-        Ok(false)
+    async fn check_chunk_changed(&mut self, _chunk_storage: &ChunkStorage) -> Result<bool> {
+        // Calculate current chunk position
+        let current_chunk_x = (self.x / 16.0) as i32;
+        let current_chunk_z = (self.z / 16.0) as i32;
+        
+        // Check if player moved to a different chunk
+        if current_chunk_x != self.last_chunk_x || current_chunk_z != self.last_chunk_z {
+            self.last_chunk_x = current_chunk_x;
+            self.last_chunk_z = current_chunk_z;
+            Ok(true)
+        } else {
+            Ok(false)
+        }
     }
 
     async fn send_chunks_around_static(

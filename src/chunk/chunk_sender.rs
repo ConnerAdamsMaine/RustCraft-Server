@@ -2,24 +2,13 @@ use anyhow::Result;
 use tokio::net::TcpStream;
 use tracing::debug;
 
-use crate::chunk::chunk_protocol::serialize_chunk;
+use crate::chunk::send_chunk_data_packet;
 use crate::chunk::ChunkStorage;
-use crate::network::protocol::write_varint;
 use crate::terrain::{Chunk, ChunkPos};
 
-/// Send a single chunk to a player
+/// Send a single chunk to a player using the Chunk Data packet
 pub async fn send_chunk(socket: &mut TcpStream, chunk: &Chunk) -> Result<()> {
-    let packet_data = serialize_chunk(chunk);
-
-    // Wrap with packet length
-    let mut full_packet = Vec::new();
-    full_packet.extend_from_slice(&write_varint(packet_data.len() as i32));
-    full_packet.extend_from_slice(&packet_data);
-
-    // Send to client
-    use tokio::io::AsyncWriteExt;
-    socket.write_all(&full_packet).await?;
-
+    send_chunk_data_packet(socket, chunk).await?;
     debug!("[CHUNK] Sent chunk {} to player", chunk.pos);
     Ok(())
 }

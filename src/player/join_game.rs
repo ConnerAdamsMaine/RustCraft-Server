@@ -10,6 +10,45 @@ use crate::network::protocol::{write_varint, ByteWritable, PacketWriter};
 pub struct JoinGameHandler;
 
 impl JoinGameHandler {
+    /// Send Spawn Position packet (0x4D in Play state)
+    /// Sets the spawn point and angle
+    pub async fn send_spawn_position(
+        stream: &mut TcpStream,
+        x: i32,
+        y: i32,
+        z: i32,
+        angle: f32,
+    ) -> Result<()> {
+        let mut writer = PacketWriter::new();
+
+        // Position (combined location)
+        // For 1.21.7, position is sent as three separate ints
+        writer.write_int(x);
+        writer.write_int(y);
+        writer.write_int(z);
+
+        // Angle (rotation in degrees, 0-360)
+        writer.write_float(angle);
+
+        let packet_data = writer.finish();
+        let packet_id = write_varint(0x4D); // Spawn Position packet ID in Play state
+        let packet_length = (packet_id.len() + packet_data.len()) as i32;
+
+        // Write packet: [length][id][data]
+        let mut frame = Vec::new();
+        frame.extend_from_slice(&write_varint(packet_length));
+        frame.extend_from_slice(&packet_id);
+        frame.extend_from_slice(&packet_data);
+
+        #[cfg(feature = "dev-sdk")]
+        let _ = crate::LOGGER.log_server_packet(&frame);
+
+        stream.write_all(&frame).await?;
+        stream.flush().await?;
+
+        Ok(())
+    }
+
     pub async fn send_configuration_finish(stream: &mut TcpStream) -> Result<()> {
         // Configuration Finish packet (0x02) - transitions from Configuration to Play state
         // This packet has no data, just the ID

@@ -68,22 +68,15 @@ impl ConfigurationHandler {
     /// - Entries (Prefixed Array):
     ///   - Entry ID (Identifier): The entry name (e.g., "minecraft:overworld")
     ///   - Data (Prefixed Optional NBT): Entry data in NBT format (or null if from known packs)
-    ///
-    /// LOCATION OF PROBLEM
-    /// FIND FIX
-    // async fn send_registry_data(stream: &mut TcpStream) -> Result<()> {
     async fn send_registry_data(stream: Arc<Mutex<&mut TcpStream>>) -> Result<()> {
         // Send minimal required registries for basic functionality
         // For a full server, you'd need to send ALL synchronized registries
         let registries = vec![
-            ("minecraft:dimension_type", Self::get_dimension_type_registry()), // Problem child #1
-            ("minecraft:damage_type", Self::get_damage_type_registry()),       // Problem child #2
+            ("minecraft:dimension_type", Self::get_dimension_type_registry()),
+            ("minecraft:damage_type", Self::get_damage_type_registry()),
         ];
 
-        // Self::send_single_registry(stream, registry_id, &entries).await?;
         for (registry_id, entries) in registries {
-            dbg!(&registry_id); // Problem child #3
-            entries.first().map(|(id, _)| dbg!(id)); // Problem child #3
             Self::send_single_registry(Arc::clone(&stream), registry_id, &entries).await?;
         }
 
@@ -92,8 +85,13 @@ impl ConfigurationHandler {
     }
 
     /// Send a single Registry Data packet
-    ///
-    /// Problem child #4
+    /// Packet Structure (1.21.7):
+    /// - Registry ID (String): e.g., "minecraft:dimension_type"
+    /// - Entries (VarInt count, then array):
+    ///   - Entry ID (String): e.g., "minecraft:overworld"
+    ///   - Data (Optional NBT - Prefixed by length):
+    ///     - Length (-1 for null, otherwise byte count)
+    ///     - NBT Data: The serialized NBT data
     async fn send_single_registry(
         stream: Arc<Mutex<&mut TcpStream>>,
         registry_id: &str,
@@ -103,33 +101,30 @@ impl ConfigurationHandler {
 
         tracing::debug!("[CONFIG] Preparing Registry Data for: {}", registry_id);
         tracing::debug!("[CONFIG] Number of entries: {}", entries.len());
-        tracing::debug!("[CONFIG] Entries detail:");
 
-        for (entry_id, nbt_data) in entries {
-            // Debug logging
-            tracing::debug!("[CONFIG] Entry ID: {:?}", entry_id);
-            tracing::debug!("[CONFIG] Entry ID bytes: {:?}", entry_id);
-            tracing::debug!("[CONFIG] Entry ID len: {}", entry_id.len());
-            // Write Entry ID (as an Identifier)
-            writer.write_bytes(entry_id);
-            // writer.write_string(entry_id);
-        }
-
-        // Write Registry ID (as an Identifier)
+        // Write Registry ID (as a String identifier)
         writer.write_string(registry_id);
 
-        // Write Entries array
-        writer.write_varint(entries.len() as i32); // Array length
+        // Write number of entries
+        writer.write_varint(entries.len() as i32);
 
+        // Write each entry
         for (entry_id, nbt_data) in entries {
-            // Write Entry ID (as an Identifier)
-            // writer.write_string(entry_id);
-            writer.write_bytes(entry_id);
+            // Convert entry_id bytes to string if needed
+            let id_str = String::from_utf8_lossy(entry_id).to_string();
+            
+            // Write Entry ID (as a String identifier)
+            writer.write_string(&id_str);
 
             // Write Data (Prefixed Optional NBT)
-            // Write length followed by the NBT data
-            writer.write_varint(nbt_data.len() as i32);
-            writer.write_bytes(nbt_data);
+            // Length of NBT data followed by the data itself
+            if nbt_data.is_empty() {
+                // If no data, write -1 to indicate null
+                writer.write_varint(-1);
+            } else {
+                writer.write_varint(nbt_data.len() as i32);
+                writer.write_bytes(nbt_data);
+            }
         }
 
         let packet_data = writer.finish();
