@@ -1,0 +1,12 @@
+[package]
+name    = "rustcraft_chunks"
+version = "0.1.0"
+edition = "2024"
+
+
+[lib]
+name = "rustcraft_chunks"
+path = "src/lib.rs"
+
+
+[dependencies]

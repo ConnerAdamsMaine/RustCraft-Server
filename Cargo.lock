@@ -401,7 +401,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "rustcraft"
+name = "rustcraft_bin"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -410,6 +410,7 @@ dependencies = [
  "futures 0.3.31",
  "md5",
  "parking_lot",
+ "rustcraft_config",
  "serde",
  "serde_json",
  "smallvec",
@@ -419,6 +420,30 @@ dependencies = [
  "tracing-subscriber",
  "uuid",
 ]
+
+[[package]]
+name = "rustcraft_chunks"
+version = "0.1.0"
+
+[[package]]
+name = "rustcraft_config"
+version = "0.1.0"
+
+[[package]]
+name = "rustcraft_decoding"
+version = "0.1.0"
+
+[[package]]
+name = "rustcraft_encoding"
+version = "0.1.0"
+
+[[package]]
+name = "rustcraft_pool"
+version = "0.1.0"
+
+[[package]]
+name = "rustcraft_sdk"
+version = "0.1.0"
 
 [[package]]
 name = "rustversion"

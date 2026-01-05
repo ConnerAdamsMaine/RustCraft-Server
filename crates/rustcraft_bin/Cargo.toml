@@ -1,0 +1,51 @@
+[package]
+name    = "rustcraft_bin"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "rustcraft"
+path = "src/main.rs"
+
+# TODO: 
+[features]
+dev-sdk = [  ]
+
+[dependencies]
+
+# Child crates
+rustcraft_config = { path = "../rustcraft_config" }
+
+# General dependencies
+anyhow             = { workspace = true } # Fine; binary application error handling.
+bincode            = { workspace = true } # Later; move to decoding crate and encoding crate as project-level deps.
+bytes              = { workspace = true } # Later; move to decoding crate and encoding crate as project-level deps.
+md5                = { workspace = true } # Later; move to decoding crate and encoding crate as project-level deps.
+parking_lot        = { workspace = true } # System; Required for server running (less moved to 'system' style architecture and moved to sep. crate
+serde_json         = { workspace = true } # Later; move to decoding crate and encoding crate as project-level deps.
+thiserror          = { workspace = true } # Refactor; Library style error handling, refactor.
+tracing            = { workspace = true } # Required; For logging in all/most crates
+tracing-subscriber = { workspace = true } # Required; For logging in all/most crates
+uuid               = { workspace = true } # Later; move to decoding crate and encoding crate as project-level deps.
+
+# System; Required here unless moved to 'system' style architecture and moved to sep. crate
+futures = { workspace = true, features = [ "bilock", "compat", "io-compat", "thread-pool", "unstable", "write-all-vectored" ] } # 
+# Later; move to decoding crate and encoding crate as project-level deps
+serde = { workspace = true, features = [ "derive" ] }
+# Later; move to decoding crate and encoding crate as project-level deps
+smallvec = { workspace = true, features = [ "const_generics", "union", "specialization", "const_new", "write", "serde" ] }
+# Required here unless moved to 'system' style architecture and moved to sep. crate
+tokio = { workspace = true, features = [ "full" ] }
+
+
+# Lint levels / priorities/priority
+# 0 = forbid
+# 1 = deny
+# 2 = warn
+# 3 = allow
+[lints.rust]
+unsafe_code = { level = "forbid", priority = 0 }
+# unsafe_code = "forbid"
+
+[lints.clippy]
+enum_glob_use = { level = "warn", priority = 2 }
