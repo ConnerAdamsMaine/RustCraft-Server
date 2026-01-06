@@ -16,6 +16,7 @@ pub trait CrossAssign<Rhs = Self> {
     fn cross_assign(&mut self, rhs: Rhs);
 }
 
+#[repr(C)]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Vec3<N> {
     pub x: N,
@@ -171,6 +172,7 @@ impl<N: Display> Display for Vec3<N> {
     }
 }
 
+#[repr(C)]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Vec2<N> {
     pub yaw:   N,
