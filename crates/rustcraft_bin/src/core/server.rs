@@ -4,14 +4,14 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use tokio::net::{TcpListener, TcpStream, ToSocketAddrs};
-use tracing::{debug, error, info};
+use tracing::{error, info};
 
 use crate::chunk::ChunkStorage;
 use crate::consts::{CHUNK_SEED, GAMELOOP_SLEEP_TICK, WORLD_PATH};
 use crate::core::game_loop::GameLoop;
 use crate::core::thread_pool::ChunkGenThreadPool;
-use crate::error_tracker::ErrorTracker;
-use crate::player::Player;
+use crate::error_tracker::{ErrorKey, ErrorTracker};
+use crate::player::PlayerData;
 use crate::terrain::ChunkGenerator;
 
 pub struct MinecraftServer {
@@ -56,31 +56,20 @@ impl MinecraftServer {
         // Start hit count reset task (runs every 5 minutes)
         self.chunk_storage.start_hit_reset_task();
 
-        // Check if world directory exists, if not generate initial chunks
-
+        // Realistically; this should never happen due to generation
+        // running on the constructor of `MinecraftServer::new()`, which itself constructs
+        // a `ChunkStorage` that initializes the world folder.
+        // The path (until a later refactor) is defined in `consts::WORLD_PATH`.
         if !Path::new(&WORLD_PATH).exists() {
-            info!("[STARTUP] World directory does not exist, generating initial 16x16 chunks...");
-            let chunk_gen_pool_clone = chunk_gen_pool.clone();
-            let chunk_storage_clone = Arc::clone(&chunk_storage);
-
-            // TODO: @use_existing : Could we call the existing impl of ChunkStorage::pregenerate_spawn_area here instead?
-            tokio::spawn(async move {
-                // Generate 16x16 chunk grid around origin
-                for x in -8..8 {
-                    for z in -8..8 {
-                        let chunk_pos = crate::terrain::ChunkPos::new(x, z);
-                        // Queue chunk generation through the chunk storage
-                        let _ = chunk_storage_clone.get_chunk(chunk_pos);
-                    }
-                }
-                info!("[STARTUP] Initial chunk generation queued, waiting for completion...");
-                // Signal that initialization is complete
-                chunk_gen_pool_clone.signal_init_complete();
-            });
-        } else {
-            // World exists, signal init complete immediately
-            self.chunk_gen_pool.signal_init_complete();
+            error!("[STARTUP] World directory does not exist after initialization!");
+            error!(
+                "[STARTUP] This should never happen unless you've deleted the world folder while the server is setting up."
+            );
+            error!("What have you done???");
+            panic!();
         }
+
+        self.chunk_gen_pool.signal_init_complete();
 
         // Spawn game loop task (main thread for game loop and logging)
         tokio::spawn(async move {
@@ -117,7 +106,7 @@ impl MinecraftServer {
                 }
                 Err(e) => {
                     error!("[NETWORK] Accept error: {}", e);
-                    let key = crate::error_tracker::ErrorKey::new("NETWORK", "accept_failed");
+                    let key = ErrorKey::new("NETWORK", "accept_failed");
                     if self.error_tracker.record_error(key) {
                         error!("[SHUTDOWN] Initiating safe shutdown due to critical errors");
                         return Ok(());
@@ -134,7 +123,7 @@ async fn handle_client(
     error_tracker: Arc<ErrorTracker>,
     chunk_gen_pool: Arc<ChunkGenThreadPool>,
 ) -> Result<()> {
-    let player = Player::new(socket).await?;
+    let player = PlayerData::new(socket).await?;
     player
         .handle(chunk_storage, error_tracker, chunk_gen_pool)
         .await?;

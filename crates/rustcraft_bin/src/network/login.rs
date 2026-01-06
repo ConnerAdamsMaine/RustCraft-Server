@@ -4,7 +4,8 @@ use tokio::net::TcpStream;
 use tracing::{info, warn};
 use uuid::Uuid;
 
-use crate::network::protocol::{ByteWritable, PacketReader, PacketWriter, read_varint, write_varint};
+use crate::network::ByteWritable;
+use crate::network::protocol::{PacketReader, PacketWriter, read_varint, write_varint};
 
 #[derive(Debug, Clone)]
 pub struct PlayerLogin {

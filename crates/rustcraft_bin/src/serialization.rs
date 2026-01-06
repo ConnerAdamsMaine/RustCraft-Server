@@ -1,6 +1,8 @@
+#![allow(dead_code)]
+
 use std::ops::{BitOrAssign as _, ShrAssign as _};
 
-use smallvec::{SmallVec, ToSmallVec}; // as Vec;
+use smallvec::SmallVec; // as Vec;
 
 /// Represents `127` in variable-length integer encoding.
 const B_SEGMENT: u32 = 0b0111_1111;
@@ -27,7 +29,6 @@ pub fn varint(value: i32) -> SmallVec<[u8; 5]> {
         if uv != 0 {
             b.bitor_assign(B_CONTINUE);
         }
-        // output.push(b);
         output.push(b);
 
         if uv == 0 {

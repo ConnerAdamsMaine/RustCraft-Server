@@ -5,27 +5,32 @@ use tracing::warn;
 use uuid::Uuid;
 
 // use crate::packet_logger::PacketLogger;
-use crate::network::protocol::{ByteWritable, PacketWriter, write_varint};
+use crate::{
+    network::{ByteWritable, PacketWriter, write_varint},
+    player::Vec3,
+};
 
 pub struct JoinGameHandler;
 
+#[allow(dead_code)]
 impl JoinGameHandler {
     /// Send Spawn Position packet (0x4D in Play state)
     /// Sets the spawn point and angle
-    pub async fn send_spawn_position(
+    pub async fn send_spawn_position<N32: Into<i32>>(
         stream: &mut TcpStream,
-        x: i32,
-        y: i32,
-        z: i32,
+        vec_3: Vec3<N32>,
+        // x: i32,
+        // y: i32,
+        // z: i32,
         angle: f32,
     ) -> Result<()> {
         let mut writer = PacketWriter::new();
 
         // Position (combined location)
         // For 1.21.7, position is sent as three separate ints
-        writer.write_int(x);
-        writer.write_int(y);
-        writer.write_int(z);
+        writer.write_int(vec_3.x);
+        writer.write_int(vec_3.y);
+        writer.write_int(vec_3.z);
 
         // Angle (rotation in degrees, 0-360)
         writer.write_float(angle);
@@ -124,10 +129,10 @@ impl JoinGameHandler {
         writer.write_string("minecraft:overworld");
 
         // Dimension Codec (simplified NBT) - empty for now
-        writer.write_bytes(&Self::get_dimension_codec_nbt());
+        writer.write_bytes(Self::get_dimension_codec_nbt());
 
         // Dimension (simplified NBT) - overworld
-        writer.write_bytes(&Self::get_dimension_nbt());
+        writer.write_bytes(Self::get_dimension_nbt());
 
         // World Name
         writer.write_string("minecraft:overworld");
@@ -182,7 +187,7 @@ impl JoinGameHandler {
         writer.write_varint(1);
 
         // Entry UUID
-        writer.write_uuid(&uuid);
+        writer.write_uuid(uuid);
 
         // Player name
         writer.write_string(username);

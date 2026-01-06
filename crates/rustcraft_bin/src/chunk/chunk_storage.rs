@@ -1,10 +1,12 @@
-use std::fs;
+use std::collections::HashMap;
+use std::ops::AddAssign;
 use std::path::PathBuf;
 use std::sync::{Arc, mpsc};
 
 use anyhow::Result;
 use parking_lot::RwLock;
-use tracing::{debug, info, trace, warn};
+use rayon::prelude::*;
+use tracing::{debug, error, info, trace, warn};
 
 use crate::chunk::cache::LruCache;
 use crate::consts::{
@@ -15,7 +17,7 @@ use crate::consts::{
     MAX_CAPACITY,
     WORLD_PATH,
 };
-use crate::core::thread_pool::ChunkGenThreadPool;
+use crate::core::ChunkGenThreadPool;
 use crate::terrain::{Chunk, ChunkGenerator, ChunkPos};
 use crate::world::{Region, RegionPos};
 
@@ -54,10 +56,22 @@ impl ChunkStorage {
         // let world_dir = PathBuf::from(WORLD_NAME);
         let world_dir = PathBuf::from(WORLD_PATH);
 
+        // NOTE: Do not call world_dir.canonicalize() before checking existence,
+        // This WILL crash if the directory does not exist yet.
+
         // Create world directory if it doesn't exist
         if !world_dir.exists() {
-            fs::create_dir_all(&world_dir)?;
+            warn!("[STARTUP] World directory not found at {:?}, creating...", world_dir);
+            // `.unwrap()` is on purpose here, so we can log -> crash immediately (HERE, not up the
+            // call stack) if creation fails.
+            std::fs::create_dir_all(&world_dir)
+                .map_err(|e| {
+                    error!("Failed to create world directory {:?}: {e}", world_dir);
+                    e
+                })
+                .unwrap();
         }
+        info!("[STARTUP] World directory found at {:?}", world_dir.canonicalize()?);
 
         info!(
             "[STARTUP] Initializing chunk cache: {}-{}MB ({}-{} chunks)",
@@ -104,6 +118,8 @@ impl ChunkStorage {
         let (tx, rx) = mpsc::channel();
 
         // Generate a 16x16 area centered around origin using thread pool
+
+        // PERF: @nested : Loop moved to thread engine
         for cx in -8..8 {
             for cz in -8..8 {
                 let chunk_pos = ChunkPos::new(cx, cz);
@@ -200,15 +216,19 @@ impl ChunkStorage {
     pub fn get_chunk(&self, chunk_pos: ChunkPos) -> Result<Chunk> {
         // Check cache first
         {
-            let mut cache = self.cache.write();
+            let cache = self.cache.write();
             if let Some(chunk) = cache.get(&chunk_pos) {
                 debug!("[CHUNK] Cache hit for {}", chunk_pos);
                 return Ok(chunk.clone());
             }
         }
 
+        let region_pos = RegionPos::from_chunk(chunk_pos.x, chunk_pos.z);
+        let region_path = self.world_dir.join(region_pos.filename());
+
         // Try to load from disk
-        if let Ok(chunk) = self.load_chunk_from_disk(chunk_pos) {
+        // if let Ok(chunk) = self.load_chunk_from_disk(chunk_pos) {
+        if let Ok(chunk) = self.load_chunk_from_disk(chunk_pos.x, chunk_pos.z, region_path) {
             debug!("[CHUNK] Loaded chunk {} from disk", chunk_pos);
             self.cache.write().insert(chunk_pos, chunk.clone());
             return Ok(chunk);
@@ -222,6 +242,7 @@ impl ChunkStorage {
         Ok(chunk)
     }
 
+    #[allow(dead_code)]
     pub fn save_chunk(&self, chunk: Chunk) -> Result<()> {
         // Update cache
         let (_, expanded, evicted_key) = {
@@ -257,117 +278,159 @@ impl ChunkStorage {
     pub fn flush_cache(&self) -> Result<()> {
         warn!("[CHUNK] Flushing all cached chunks to disk...");
 
-        let chunks_to_save: Vec<Chunk> = self
-            .cache
-            .write()
-            .iter()
-            .map(|(_, chunk)| chunk.clone())
-            .collect();
-
-        let region_positions: Vec<RegionPos> = chunks_to_save
-            .iter()
-            .map(|chunk| RegionPos::from_chunk(chunk.pos.x, chunk.pos.z))
-            .collect();
-
         let start = std::time::Instant::now();
 
-        for chunk in chunks_to_save {
-            let region_pos = RegionPos::from_chunk(chunk.pos.x, chunk.pos.z); // refactor - temp 
-            self.save_chunk_to_disk_vectored(region_pos, chunk)?;
-        }
+        let guard = self.cache.write();
 
-        let end = std::time::Instant::now();
-        let duration = end.duration_since(start);
+        let mut region_map: HashMap<RegionPos, Vec<Chunk>> = HashMap::new();
+        let mut saved_count = 0;
+        let mut skipped_count = 0;
+
+        self.fill_region_map(&guard, &mut skipped_count, &mut region_map, &mut saved_count);
+        // explicit drop after setting up flush_tracking
+        drop(guard);
+
+        self.par_gen_cache(region_map, self.world_dir.clone());
+
+        let duration = start.elapsed();
+
         info!(
-            "[CHUNK] Flushed {} chunks to disk in {:.2}s ({:.00} chunks/sec)",
-            region_positions.len(),
+            "[CHUNK] Flushed {} chunks to disk in {:.2}s ({:.0} chunks/sec){}",
+            saved_count,
             duration.as_secs_f64(),
-            region_positions.len() as f64 / duration.as_secs_f64()
+            if duration.as_secs_f64() > 0.0001 {
+                saved_count as f64 / duration.as_secs_f64()
+            } else {
+                0.0
+            },
+            if skipped_count > 0 {
+                format!(" (skipped {} invalid chunks)", skipped_count)
+            } else {
+                "".to_string()
+            }
         );
 
         Ok(())
     }
 
-    fn load_chunk_from_disk(&self, chunk_pos: ChunkPos) -> Result<Chunk> {
-        let region_pos = RegionPos::from_chunk(chunk_pos.x, chunk_pos.z);
-        let region_path = self.world_dir.join(region_pos.filename());
+    fn fill_region_map(
+        &self,
+        guard: &parking_lot::RwLockWriteGuard<'_, LruCache<ChunkPos, Chunk>>,
+        skipped_count: &mut usize,
+        region_map: &mut HashMap<RegionPos, Vec<Chunk>>,
+        saved_count: &mut usize,
+    ) {
+        for (_, chunk) in guard.iter() {
+            let region_pos = RegionPos::from_chunk(chunk.pos.x, chunk.pos.z);
 
+            if !region_pos.is_valid() {
+                warn!("Skipping save for chunk outside bounds: ({}, {})", chunk.pos.x, chunk.pos.z);
+                skipped_count.add_assign(1);
+                continue;
+            }
+
+            region_map.entry(region_pos).or_default().push(chunk.clone());
+            saved_count.add_assign(1);
+        }
+    }
+
+    fn par_gen_cache<P: AsRef<std::path::Path> + Send + Sync>(
+        &self,
+        region_map: HashMap<RegionPos, Vec<Chunk>>,
+        world_dir: P,
+    ) {
+        let groups: Vec<(RegionPos, Vec<Chunk>)> = region_map.into_par_iter().collect();
+        groups.par_iter().for_each(|(region_pos, chunks)| {
+            let region_path = world_dir.as_ref().join(region_pos.filename());
+
+            let result = (|| -> Result<()> {
+                let mut region = if region_path.exists() {
+                    let data = std::fs::read(&region_path)?;
+                    Region::deserialize(&data)?
+                } else {
+                    Region::new(*region_pos)
+                };
+
+                for chunk in chunks {
+                    region.insert(chunk.clone());
+                }
+
+                let serialized = region.serialize();
+                std::fs::write(&region_path, serialized)?;
+                Ok(())
+            })();
+
+            match result {
+                Ok(()) => {
+                    debug!(
+                        "Saved {} chunks to region file {:?}",
+                        chunks.len(),
+                        region_path.canonicalize().unwrap()
+                    );
+                }
+                Err(e) => {
+                    error!("Failed to save region: {:?} ({} chunks): {}", region_pos, chunks.len(), e);
+                }
+            }
+        });
+    }
+
+    // old impl.
+    // pub fn flush_cache(&self) -> Result<()> {
+    //     warn!("[CHUNK - V1] Flushing all cached chunks to disk...");
+    //
+    //     // PERF: @caching : DRASTICALLY improved caching times
+    //     return self.flush_cache_2();
+    //
+    //     let chunks_to_save: Vec<Chunk> = self
+    //         .cache
+    //         .write()
+    //         .iter()
+    //         .map(|(_, chunk)| chunk.clone())
+    //         .collect();
+    //
+    //     let region_positions: Vec<RegionPos> = chunks_to_save
+    //         .iter()
+    //         .map(|chunk| RegionPos::from_chunk(chunk.pos.x, chunk.pos.z))
+    //         .collect();
+    //
+    //     let start = std::time::Instant::now();
+    //
+    //     for chunk in chunks_to_save {
+    //         let region_pos = RegionPos::from_chunk(chunk.pos.x, chunk.pos.z); // refactor - temp
+    //         self.save_chunk_to_disk_vectored(region_pos, chunk)?;
+    //     }
+    //
+    //     let end = std::time::Instant::now();
+    //     let duration = end.duration_since(start);
+    //     info!(
+    //         "[CHUNK] Flushed {} chunks to disk in {:.2}s ({:.00} chunks/sec)",
+    //         region_positions.len(),
+    //         duration.as_secs_f64(),
+    //         region_positions.len() as f64 / duration.as_secs_f64()
+    //     );
+    //
+    //     Ok(())
+    // }
+
+    fn load_chunk_from_disk(&self, chunk_x: i32, chunk_z: i32, region_path: PathBuf) -> Result<Chunk> {
         if !region_path.exists() {
             return Err(anyhow::anyhow!("Region file not found"));
         }
 
-        let data = fs::read(&region_path)?;
+        let data = std::fs::read(&region_path)?;
         let region = Region::deserialize(&data)?;
 
         region
-            .get(chunk_pos.x, chunk_pos.z)
+            .get(chunk_x, chunk_z)
             .cloned()
             .ok_or_else(|| anyhow::anyhow!("Chunk not found in region"))
     }
 
-    fn save_chunk_to_disk_vectored(&self, region_pos: RegionPos, chunk: Chunk) -> Result<()> {
-        // let region_pos = RegionPos::from_chunk(chunk_pos.x, chunk_pos.z);
-
-        if !region_pos.is_valid() {
-            warn!("Chunk ({:?}, {:?}) is outside valid world bounds", region_pos.x, region_pos.z);
-            return Ok(());
-        }
-
-        let region_path = self.world_dir.join(region_pos.filename());
-
-        // Load existing region or create new one
-        let mut region = if region_path.exists() {
-            let data = fs::read(&region_path)?;
-            Region::deserialize(&data)?
-        } else {
-            Region::new(region_pos)
-        };
-
-        region.insert(chunk.clone());
-
-        let serialized = region.serialize();
-        fs::write(&region_path, serialized)?;
-
-        debug!("Saved chunk ({:?}, {:?}) to {:?}", region_pos.x, region_pos.z, region_path.canonicalize()?);
-
-        Ok(())
-    }
-
-    // fn get_region_path(&self, region_pos: RegionPos) -> PathBuf {
-    //     self.world_dir.join(region_pos.filename())
-    // }
-
+    #[allow(dead_code)]
     pub fn cache_stats(&self) -> CacheLenCapacity {
         CacheLenCapacity::from((self.cache.read().len(), self.cache.read().current_capacity()))
     }
-
-    // fn save_chunk_to_disk(&self, chunk_pos: ChunkPos, chunk: Chunk) -> Result<()> {
-    //     let region_pos = RegionPos::from_chunk(chunk_pos.x, chunk_pos.z);
-    //
-    //     if !region_pos.is_valid() {
-    //         warn!("Chunk {:?} is outside valid world bounds", chunk_pos);
-    //         return Ok(());
-    //     }
-    //
-    //     let region_path = self.get_region_path(chunk_pos);
-    //
-    //     // Load existing region or create new one
-    //     let mut region = if region_path.exists() {
-    //         let data = fs::read(&region_path)?;
-    //         Region::deserialize(&data)?
-    //     } else {
-    //         Region::new(region_pos)
-    //     };
-    //
-    //     region.insert(chunk.clone());
-    //
-    //     let serialized = region.serialize();
-    //     fs::write(&region_path, serialized)?;
-    //
-    //     debug!("Saved chunk {:?} to {}", chunk_pos, region_path.display());
-    //
-    //     Ok(())
-    // }
 }
 
 impl Clone for ChunkStorage {

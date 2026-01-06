@@ -1,9 +1,11 @@
+#![allow(dead_code)]
+
 use anyhow::Result;
 use bytes::BytesMut;
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
 
-use crate::network::protocol::{ByteWritable, PacketWriter, write_varint};
+use crate::network::{ByteWritable, PacketWriter, write_varint};
 use crate::terrain::{BlockType, Chunk};
 
 /// Send a single chunk to the client using the Chunk Data packet
@@ -32,7 +34,7 @@ pub async fn send_chunk_data_packet(socket: &mut TcpStream, chunk: &Chunk) -> Re
     let packet_length = (packet_id.len() + packet_data.len()) as i32;
 
     // Write packet: [length][id][data]
-    let mut frame = Vec::new();
+    let mut frame = vec![];
     frame.extend_from_slice(&write_varint(packet_length));
     frame.extend_from_slice(&packet_id);
     frame.extend_from_slice(&packet_data);
@@ -50,7 +52,7 @@ pub async fn send_chunk_data_packet(socket: &mut TcpStream, chunk: &Chunk) -> Re
 /// Create a minimal heightmap NBT compound
 /// Structure: TAG_Compound "" { TAG_LongArray "MOTION_BLOCKING": [...] }
 fn create_heightmap_nbt() -> Vec<u8> {
-    let mut bytes = Vec::new();
+    let mut bytes = vec![];
 
     // TAG_Compound
     bytes.push(0x0A);
@@ -83,7 +85,7 @@ fn create_heightmap_nbt() -> Vec<u8> {
 /// Create minimal chunk data NBT
 /// For now, return a minimal valid structure
 fn create_chunk_data_nbt(_chunk: &Chunk) -> Vec<u8> {
-    let mut bytes = Vec::new();
+    let mut bytes = vec![];
 
     // TAG_Compound (root)
     bytes.push(0x0A);
@@ -140,10 +142,11 @@ fn has_section_data(chunk: &Chunk, section_y: usize) -> bool {
     for x in 0..16 {
         for y in base_y..base_y + 16 {
             for z in 0..16 {
-                if let Some(block) = chunk.get_block(x, y, z) {
-                    if block != BlockType::Air {
-                        return true;
-                    }
+                let Some(block) = chunk.get_block(x, y, z) else {
+                    continue;
+                };
+                if block != BlockType::Air {
+                    return true;
                 }
             }
         }

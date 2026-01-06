@@ -11,6 +11,11 @@ members = [
   "crates/rustcraft_pool",
   "crates/rustcraft_sdk",
 ]
+exclude = [
+  #
+  "Protocols",
+]
+
 
 resolver = "2"
 
@@ -24,6 +29,7 @@ exclude = [
   "**/tests/**",
   "**/examples/**",
   "**/benches/**",
+  "protocols/**",
 ]
 
 # [package]
@@ -62,6 +68,8 @@ smallvec = { version = "1.15.1", features = [
   "serde",
 ] }
 proc-macro2 = "1.0"
+rayon = { version = "1.11.0" }
+dashmap = "7.0.0-rc2"
 
 
 [profile.dev]

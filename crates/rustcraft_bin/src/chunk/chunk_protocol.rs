@@ -1,6 +1,8 @@
+#![allow(dead_code)]
+
 use bytes::BytesMut;
 
-use crate::network::protocol::{ByteWritable, PacketWriter};
+use crate::network::{ByteWritable, PacketWriter};
 use crate::terrain::{BlockType, Chunk};
 
 /// Serialize a chunk into Minecraft protocol format (chunk data packet)
@@ -58,10 +60,11 @@ fn has_section_data(chunk: &Chunk, section_y: usize) -> bool {
     for x in 0..16 {
         for y in base_y..base_y + 16 {
             for z in 0..16 {
-                if let Some(block) = chunk.get_block(x, y, z) {
-                    if block != BlockType::Air {
-                        return true;
-                    }
+                let Some(block) = chunk.get_block(x, y, z) else {
+                    continue;
+                };
+                if block != BlockType::Air {
+                    return true;
                 }
             }
         }
@@ -78,10 +81,11 @@ fn serialize_section(writer: &mut PacketWriter, chunk: &Chunk, section_y: usize)
     for x in 0..16 {
         for y in base_y..base_y + 16 {
             for z in 0..16 {
-                if let Some(block) = chunk.get_block(x, y, z) {
-                    if block != BlockType::Air {
-                        block_count += 1;
-                    }
+                let Some(block) = chunk.get_block(x, y, z) else {
+                    continue;
+                };
+                if block != BlockType::Air {
+                    block_count += 1;
                 }
             }
         }

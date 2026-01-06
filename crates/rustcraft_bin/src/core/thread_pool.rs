@@ -1,7 +1,9 @@
+#![allow(dead_code)]
+
 use std::marker::PhantomData;
 use std::sync::mpsc::{Sender, channel};
 use std::sync::{Arc, Condvar, Mutex};
-use std::{alloc, thread};
+use std::thread;
 
 use anyhow::Result;
 use tracing::info;

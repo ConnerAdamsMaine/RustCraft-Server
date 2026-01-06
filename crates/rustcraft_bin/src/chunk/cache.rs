@@ -1,10 +1,13 @@
+#![allow(dead_code)]
+
 use std::collections::{HashMap, VecDeque};
+use std::sync::atomic::AtomicUsize;
 use std::time::{Duration, Instant};
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 struct CacheEntry<V> {
     value:          V,
-    hits:           usize,
+    hits:           AtomicUsize,
     last_hit_reset: Instant,
 }
 
@@ -12,7 +15,7 @@ struct CacheEntry<V> {
 pub struct LruCache<K: Clone + Eq + std::hash::Hash, V: Sized> {
     current_capacity:   usize,
     max_capacity:       usize,
-    cache:              HashMap<K, CacheEntry<V>>,
+    cache:              HashMap<K, CacheEntry<V>>, // DashMap<K, CacheEntry<V>>,
     access_order:       VecDeque<K>,
     item_size:          usize,
     hit_reset_interval: Duration,
@@ -23,7 +26,7 @@ impl<K: Clone + Eq + std::hash::Hash, V> LruCache<K, V> {
         Self {
             current_capacity:   initial_capacity,
             max_capacity:       initial_capacity,
-            cache:              HashMap::new(),
+            cache:              HashMap::new(), // dashmap::DashMap::new(),
             access_order:       VecDeque::new(),
             item_size:          0,
             hit_reset_interval: Duration::from_secs(300), // 5 minutes
@@ -35,6 +38,7 @@ impl<K: Clone + Eq + std::hash::Hash, V> LruCache<K, V> {
             current_capacity: initial_capacity,
             max_capacity,
             cache: HashMap::new(),
+            // cache: DashMap::new(),
             access_order: VecDeque::new(),
             item_size,
             hit_reset_interval: Duration::from_secs(300), // 5 minutes
@@ -52,21 +56,32 @@ impl<K: Clone + Eq + std::hash::Hash, V> LruCache<K, V> {
         false
     }
 
-    pub fn get(&mut self, key: &K) -> Option<&V> {
-        if self.cache.contains_key(key) {
-            // Move to end (most recently used)
-            self.access_order.retain(|k| k != key);
-            self.access_order.push_back(key.clone());
-
-            // Record hit
-            if let Some(entry) = self.cache.get_mut(key) {
-                entry.hits += 1;
+    pub fn get(&self, key: &K) -> Option<&V> {
+        if let Some(guard) = self.cache.get(key) {
+            guard.hits.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            {
+                let mut order = self.access_order.clone();
+                order.retain(|k| k != key);
+                order.push_back(key.clone());
             }
-
-            self.cache.get(key).map(|e| &e.value)
+            Some(&guard.value)
         } else {
             None
         }
+        // if self.cache.contains_key(key) {
+        //     // Move to end (most recently used)
+        //     self.access_order.retain(|k| k != key);
+        //     self.access_order.push_back(key.clone());
+        //
+        //     // Record hit
+        //     if let Some(ref mut entry) = self.cache.get_mut(key) {
+        //         entry.hits.add_assign(1);
+        //     }
+        //
+        //     self.cache.get(key).map(|e| &e.value)
+        // } else {
+        //     None
+        // }
     }
 
     pub fn insert(&mut self, key: K, value: V) -> (Option<V>, bool, Option<K>) {
@@ -96,7 +111,7 @@ impl<K: Clone + Eq + std::hash::Hash, V> LruCache<K, V> {
             key,
             CacheEntry {
                 value,
-                hits: 0,
+                hits: AtomicUsize::new(0),
                 last_hit_reset: now,
             },
         );
@@ -149,11 +164,17 @@ impl<K: Clone + Eq + std::hash::Hash, V> LruCache<K, V> {
     fn evict_lowest_hits(&mut self) -> Option<K> {
         // Find the key with the lowest hit count
         let mut lowest_key: Option<K> = None;
-        let mut lowest_hits: usize = usize::MAX;
+        // let mut lowest_hits: usize = usize::MAX;
+        let lowest_hits: AtomicUsize = AtomicUsize::new(usize::MAX);
 
         for (key, entry) in self.cache.iter() {
-            if entry.hits < lowest_hits {
-                lowest_hits = entry.hits;
+            let e_hits = entry.hits.load(std::sync::atomic::Ordering::Relaxed);
+            let l_hits = lowest_hits.load(std::sync::atomic::Ordering::Relaxed);
+
+            if e_hits < l_hits {
+                // entry.hits < lowest_hits {
+                // lowest_hits = entry.hits;
+                lowest_hits.store(e_hits, std::sync::atomic::Ordering::Relaxed);
                 lowest_key = Some(key.clone());
             }
         }
@@ -171,14 +192,16 @@ impl<K: Clone + Eq + std::hash::Hash, V> LruCache<K, V> {
         let now = Instant::now();
         for entry in self.cache.values_mut() {
             if now.duration_since(entry.last_hit_reset) >= self.hit_reset_interval {
-                entry.hits = 0;
+                entry.hits = AtomicUsize::new(0);
                 entry.last_hit_reset = now;
             }
         }
     }
 
     pub fn get_hit_count(&self, key: &K) -> Option<usize> {
-        self.cache.get(key).map(|e| e.hits)
+        self.cache
+            .get(key)
+            .map(|e| e.hits.load(std::sync::atomic::Ordering::Relaxed))
     }
 }
 

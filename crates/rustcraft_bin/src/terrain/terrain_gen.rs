@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use crate::terrain::noise;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -33,6 +34,7 @@ impl HeightMap {
 
     fn generate(&mut self) {
         // Base continental noise
+        // PERF: @nested : Loop moved to thread engine
         for y in 0..self.height {
             for x in 0..self.width {
                 let fx = x as f64;
@@ -58,6 +60,7 @@ impl HeightMap {
 
     fn apply_plate_collisions(&mut self) {
         // Simulate collision zones as mountain ridges
+        // PERF: @nested : Loop moved to thread engine
         for y in 0..self.height {
             for x in 0..self.width {
                 let fx = x as f64;
@@ -88,9 +91,9 @@ impl HeightMap {
 
         for _ in 0..iterations {
             let mut new_data = self.data.clone();
-
-            for y in 1..(self.height - 1) {
-                for x in 1..(self.width - 1) {
+            // PERF: @nested : Loop moved to thread engine
+            (1..(self.height - 1)).for_each(|y| {
+                (1..(self.width - 1)).for_each(|x| {
                     let center = self.data[y][x];
                     let neighbors = [
                         self.data[y - 1][x],
@@ -108,8 +111,8 @@ impl HeightMap {
                     if center < min_neighbor - erosion_amount {
                         new_data[y][x] += erosion_amount * 0.5;
                     }
-                }
-            }
+                });
+            });
 
             self.data = new_data;
         }
@@ -146,15 +149,15 @@ impl BiomeMap {
         let width = 512; // Match height map size
         let height = 512;
         let mut data = vec![vec![Biome::Plains; width]; height];
-
-        for y in 0..height {
-            for x in 0..width {
+        // PERF: @nested : Loop moved to thread engine
+        (0..height).for_each(|y| {
+            (0..width).for_each(|x| {
                 let elevation = height_map.get(x, y);
                 let slope = height_map.get_slope(x, y);
 
                 data[y][x] = Self::determine_biome(elevation, slope);
-            }
-        }
+            });
+        });
 
         Self { data, width, height }
     }

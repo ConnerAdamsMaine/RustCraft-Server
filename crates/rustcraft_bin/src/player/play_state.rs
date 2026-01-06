@@ -1,8 +1,11 @@
+#![allow(dead_code)]
+
 use anyhow::Result;
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
 
-use crate::network::protocol::{ByteWritable, PacketWriter, write_varint};
+use crate::network::{ByteWritable, PacketWriter, write_varint};
+use crate::player::{Vec2, Vec3};
 
 pub struct PlayStateHandler;
 
@@ -36,11 +39,11 @@ impl PlayStateHandler {
 
     /// Send Set Default Spawn Position packet (0x4E in Play state)
     /// Tells the client where to respawn when they die
-    pub async fn send_set_default_spawn_position(
+    pub async fn send_set_default_spawn_position<N: Into<i32>>(
         stream: &mut TcpStream,
-        x: i32,
-        y: i32,
-        z: i32,
+        x: N,
+        y: N,
+        z: N,
         angle: f32,
     ) -> Result<()> {
         let mut writer = PacketWriter::new();
@@ -75,26 +78,28 @@ impl PlayStateHandler {
 
     /// Send Player Position And Look packet (0x28 in Play state, server → client)
     /// This packet tells the client where they should be and how they should look
-    pub async fn send_player_position_and_look(
+    pub async fn send_player_position_and_look<N64: Into<f64>, N32: Into<f32>>(
         stream: &mut TcpStream,
-        x: f64,
-        y: f64,
-        z: f64,
-        yaw: f32,
-        pitch: f32,
+        vec_3: Vec3<N64>,
+        // x: N64,
+        // y: N64,
+        // z: N64,
+        vec_2: Vec2<N32>,
+        // yaw: N32,
+        // pitch: N32,
         relative_arguments: u8,
         teleport_id: i32,
     ) -> Result<()> {
         let mut writer = PacketWriter::new();
 
         // Position
-        writer.write_double(x);
-        writer.write_double(y);
-        writer.write_double(z);
+        writer.write_double(vec_3.x);
+        writer.write_double(vec_3.y);
+        writer.write_double(vec_3.z);
 
         // Rotation (yaw and pitch)
-        writer.write_float(yaw);
-        writer.write_float(pitch);
+        writer.write_float(vec_2.yaw);
+        writer.write_float(vec_2.pitch);
 
         // Relative arguments (bitfield)
         // Bit 0 (0x01): X is relative
@@ -158,25 +163,27 @@ impl PlayStateHandler {
 
     /// Send Synchronize Player Position packet (0x31 in Play state)
     /// Alternative to Player Position And Look, used for synchronization
-    pub async fn send_synchronize_player_position(
+    pub async fn send_synchronize_player_position<N64: Into<f64>, N32: Into<f32>>(
         stream: &mut TcpStream,
-        x: f64,
-        y: f64,
-        z: f64,
-        yaw: f32,
-        pitch: f32,
+        vec_3: Vec3<N64>,
+        // x: f64,
+        // y: f64,
+        // z: f64,
+        vec_2: Vec2<N32>,
+        // yaw: f32,
+        // pitch: f32,
         teleport_id: i32,
     ) -> Result<()> {
         let mut writer = PacketWriter::new();
 
         // Position
-        writer.write_double(x);
-        writer.write_double(y);
-        writer.write_double(z);
+        writer.write_double(vec_3.x);
+        writer.write_double(vec_3.y);
+        writer.write_double(vec_3.z);
 
         // Rotation
-        writer.write_float(yaw);
-        writer.write_float(pitch);
+        writer.write_float(vec_2.yaw);
+        writer.write_float(vec_2.pitch);
 
         // Teleport ID
         writer.write_varint(teleport_id);

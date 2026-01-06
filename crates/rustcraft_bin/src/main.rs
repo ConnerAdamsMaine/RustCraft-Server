@@ -1,25 +1,25 @@
 // Core modules
-pub mod chunk;
+mod chunk;
 mod consts;
-pub mod core;
-pub mod error_tracker;
-pub mod network;
-pub mod player;
-pub mod terrain;
-pub mod world;
+mod core;
+mod error_tracker;
+mod network;
+mod player;
+mod terrain;
+mod world;
 
-pub mod serialization;
+mod serialization;
 
 // Developer SDK modules (feature-gated)
 #[cfg(feature = "dev-sdk")]
-pub mod sdk;
+mod sdk;
 
 // Re-export commonly used types
 use anyhow::Result;
 pub use error_tracker::{ErrorKey, ErrorTracker};
 
 use crate::consts::SERVER_ADDR;
-use crate::core::server::MinecraftServer;
+use crate::core::MinecraftServer;
 #[cfg(feature = "dev-sdk")]
 use crate::sdk::PacketLogger;
 

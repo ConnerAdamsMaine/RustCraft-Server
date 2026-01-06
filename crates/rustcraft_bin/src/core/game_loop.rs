@@ -1,8 +1,10 @@
-use std::time::{Duration, Instant};
+#![allow(dead_code)]
+
+use std::time::Instant;
 
 use anyhow::Result;
 
-use crate::consts::{GAMELOOP_TICK_RATE, GAMELOOP_TICK_RATE_DURATION}; // replaces 'TICK_RATE'
+use crate::consts::GAMELOOP_TICK_RATE_DURATION; // replaces 'TICK_RATE'
 // use crate::GAMELOOP_TICK_RATE_DURATION; // replaces 'TICK_DURATION'
 
 pub struct GameLoop {

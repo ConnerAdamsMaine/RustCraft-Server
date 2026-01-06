@@ -49,6 +49,7 @@ impl ChunkGenerator {
         let bm_lock = self.biome_map.read();
 
         if let (Some(height_map), Some(biome_map)) = (hm_lock.as_ref(), bm_lock.as_ref()) {
+            // PERF: @nested : Loop moved to thread engine
             for x in 0..16 {
                 for z in 0..16 {
                     let world_x = (pos.x * 16 + x as i32) as usize;

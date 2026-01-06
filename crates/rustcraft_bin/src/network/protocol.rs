@@ -1,9 +1,13 @@
+#![allow(dead_code)]
+
 use std::io::{Cursor, Read};
-use std::ops::{AddAssign, BitOrAssign, ShrAssign as _};
+use std::ops::{AddAssign, BitOrAssign};
 
 use anyhow::{Result, anyhow};
 use bytes::{BufMut, Bytes, BytesMut};
 use uuid::Uuid;
+
+use crate::network::ByteWritable;
 
 /// Validate a Minecraft identifier (resource location)
 /// Ensures the identifier contains no null bytes and only valid characters
@@ -101,34 +105,6 @@ impl Default for PacketWriter {
     fn default() -> Self {
         Self::new()
     }
-}
-
-pub trait ByteWritable {
-    fn write_varint<N: Into<i32>>(&mut self, value: N);
-
-    fn write_string<S: AsRef<str>>(&mut self, s: S);
-
-    fn write_byte<N: Into<u8>>(&mut self, value: N);
-
-    fn write_short<N: Into<i16>>(&mut self, value: N);
-
-    fn write_int<N: Into<i32>>(&mut self, value: N);
-
-    fn write_long<N: Into<i64>>(&mut self, value: N);
-
-    fn write_float<N: Into<f32>>(&mut self, value: N);
-
-    fn write_double<N: Into<f64>>(&mut self, value: N);
-
-    fn write_bool<B: Into<bool>>(&mut self, value: B);
-
-    // TODO: @check : check the constraints on how we want to do this -
-    //  May want something like: AsRef + AsBytes or something else
-    fn write_uuid<U: AsRef<Uuid>>(&mut self, uuid: U);
-
-    fn write_bytes<A: AsRef<[u8]>>(&mut self, bytes: A);
-
-    fn finish(self) -> BytesMut;
 }
 
 impl ByteWritable for PacketWriter {

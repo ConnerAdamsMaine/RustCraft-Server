@@ -1,3 +1,3 @@
 pub mod packet_logger;
 
-pub use packet_logger::*;
+use packet_logger::*;

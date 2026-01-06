@@ -1,11 +1,9 @@
-pub mod cache;
-pub mod chunk_data_packet;
-pub mod chunk_protocol;
-pub mod chunk_sender;
-pub mod chunk_storage;
+mod cache;
+mod chunk_data_packet;
+mod chunk_protocol;
+mod chunk_sender;
+mod chunk_storage;
 
-pub use cache::*;
-pub use chunk_data_packet::send_chunk_data_packet;
-pub use chunk_protocol::*;
-pub use chunk_sender::*;
-pub use chunk_storage::ChunkStorage;
+pub use crate::chunk::chunk_data_packet::send_chunk_data_packet;
+pub use crate::chunk::chunk_sender::send_chunk;
+pub use crate::chunk::chunk_storage::ChunkStorage;

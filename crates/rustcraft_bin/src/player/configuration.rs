@@ -1,4 +1,3 @@
-use std::ffi::CString;
 use std::sync::Arc;
 
 use anyhow::{Result, anyhow};
@@ -7,15 +6,16 @@ use tokio::net::TcpStream;
 use tokio::sync::Mutex;
 use tracing::debug;
 
-use crate::network::protocol::{
+use crate::network::{
     ByteWritable,
+    DamageTypeCompound,
+    DimensionCompound,
     NBTBuilder,
     PacketReader,
     PacketWriter,
     read_varint,
     write_varint,
 };
-use crate::network::{DamageTypeCompound, DimensionCompound};
 
 pub enum ConfigurationAckPacket {
     ClientInformation = 0x00,

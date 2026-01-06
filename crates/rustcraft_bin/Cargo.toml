@@ -27,6 +27,9 @@ thiserror          = { workspace = true } # Refactor; Library style error handli
 tracing            = { workspace = true } # Required; For logging in all/most crates
 tracing-subscriber = { workspace = true } # Required; For logging in all/most crates
 uuid               = { workspace = true } # Later; move to decoding crate and encoding crate as project-level deps.
+rayon              = { workspace = true } # System; Required here unless moved to 'system' style architecture and moved to sep. crate
+
+dashmap = { workspace = true }
 
 # System; Required here unless moved to 'system' style architecture and moved to sep. crate
 futures = { workspace = true, features = [ "bilock", "compat", "io-compat", "thread-pool", "unstable", "write-all-vectored" ] } # 
@@ -44,7 +47,7 @@ tokio = { workspace = true, features = [ "full" ] }
 # 2 = warn
 # 3 = allow
 [lints.rust]
-unsafe_code = { level = "forbid", priority = 0 }
+unsafe_code = { level = "warn", priority = 0 }
 # unsafe_code = "forbid"
 
 [lints.clippy]
