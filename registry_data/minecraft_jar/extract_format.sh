@@ -23,7 +23,8 @@ function check_jar_exists() {
 function dep_check() {
   check=$(command -v biome)
   if [[ ! $check ]]; then
-    printf "biome is not installed. Please install biome to use this script.\n"
+    printf "biomejs is not installed. Please install biomejs to use this script.\n"
+    printf "Visit 'https://biomejs.dev/' for installation instructions.\n"
     return 1
   fi
 }

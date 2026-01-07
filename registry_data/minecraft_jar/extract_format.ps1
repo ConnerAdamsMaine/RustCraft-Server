@@ -41,7 +41,8 @@ function check_jar_exists {
 function dep_check {
     $check = Get-Command biome -ErrorAction SilentlyContinue;
     if (-not $check) {
-        Write-Host "biome is not installed. Please install biome to use this script.";
+        Write-Host "biomejs is not installed. Please install biomejs to use this script.";
+        Write-Host "Visit 'https://biomejs.dev/' for installation instructions.";
         return 1;
     };
     return 0;
