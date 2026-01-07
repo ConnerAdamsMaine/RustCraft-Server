@@ -1,0 +1,7 @@
+generated/
+libraries/
+logs/
+versions/
+
+server_1.21.7.jar
+server_*.jar

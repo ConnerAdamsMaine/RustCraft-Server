@@ -1,0 +1,8 @@
+
+To extract all data, run this:
+java -DbundlerMainClass="net.minecraft.data.Main" -jar server.jar -all
+
+For formatting after extraction, prefer using a high performance json formatter like biome.
+
+Run this:
+biome format --write --files-max-size=50000000 --json-formatter-enabled=true --json-formatter-indent-style=tab --json-formatter-indent-width=2 --json-formatter-line-ending=lf
