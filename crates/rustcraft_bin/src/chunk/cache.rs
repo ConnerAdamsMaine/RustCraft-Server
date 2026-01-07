@@ -191,6 +191,10 @@ impl<K: Clone + Eq + std::hash::Hash, V> LruCache<K, V> {
     pub fn reset_hit_counts(&mut self) {
         let now = Instant::now();
         for entry in self.cache.values_mut() {
+            if now.duration_since(entry.last_hit_reset) <= self.hit_reset_interval {
+                return;
+            }
+
             if now.duration_since(entry.last_hit_reset) >= self.hit_reset_interval {
                 entry.hits = AtomicUsize::new(0);
                 entry.last_hit_reset = now;

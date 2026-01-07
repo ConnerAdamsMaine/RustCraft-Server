@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+use std::sync::atomic::AtomicBool;
 use std::time::Instant;
 
 use anyhow::Result;
@@ -10,6 +11,7 @@ use crate::consts::GAMELOOP_TICK_RATE_DURATION; // replaces 'TICK_RATE'
 pub struct GameLoop {
     tick_count: u64,
     last_tick:  Instant,
+    // atomic:     AtomicBool,
 }
 
 impl GameLoop {
@@ -17,10 +19,11 @@ impl GameLoop {
         Self {
             tick_count: 0,
             last_tick:  Instant::now(),
+            // atomic:     AtomicBool::new(false),
         }
     }
 
-    pub fn tick(&mut self) -> Result<()> {
+    pub fn tick(&mut self) {
         let now = Instant::now();
         let elapsed = now.duration_since(self.last_tick);
 
@@ -37,7 +40,7 @@ impl GameLoop {
             tracing::trace!("Tick {}", self.tick_count);
         }
 
-        Ok(())
+        // Ok(())
     }
 
     fn update_players(&mut self) {

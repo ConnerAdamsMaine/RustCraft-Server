@@ -9,7 +9,7 @@ use tokio::net::TcpStream;
 use uuid::Uuid;
 
 use crate::chunk::ChunkStorage;
-use crate::core::ChunkGenThreadPool;
+use crate::core::{ChunkGenThreadPool, HandlerData};
 use crate::error_tracker::{ErrorKey, ErrorTracker};
 use crate::network::{LoginHandler, read_varint};
 use crate::player::configuration::ConfigurationHandler;
@@ -65,17 +65,12 @@ impl PlayerData {
         })
     }
 
-    pub async fn handle(
-        mut self,
-        _chunk_storage: ChunkStorage,
-        error_tracker: Arc<ErrorTracker>,
-        chunk_gen_pool: Arc<ChunkGenThreadPool>,
-    ) -> Result<()> {
+    pub async fn handle(mut self, hd: HandlerData) -> Result<()> {
         tracing::debug!("[PLAYER] Player handler starting");
 
         // Wait for world initialization to complete (in blocking task to not block async runtime)
         tracing::debug!("[PLAYER] Waiting for world initialization...");
-        let chunk_gen_pool_clone = Arc::clone(&chunk_gen_pool);
+        let chunk_gen_pool_clone = Arc::clone(&hd.chunk_gen_pool);
         tokio::task::spawn_blocking(move || {
             chunk_gen_pool_clone.wait_for_init_complete();
             tracing::info!("[PLAYER] World initialization complete, accepting players");
@@ -95,7 +90,7 @@ impl PlayerData {
             Err(e) => {
                 tracing::error!("[LOGIN] Authentication failed: {}", e);
                 let key = ErrorKey::new("LOGIN", format!("auth_failed: {}", e));
-                error_tracker.record_error(key);
+                hd.error_tracker.record_error(key);
                 return Err(e);
             }
         };
@@ -114,7 +109,7 @@ impl PlayerData {
         if let Err(e) = ConfigurationHandler::handle_configuration(&mut self.socket).await {
             tracing::error!("[PLAYER] Configuration phase failed for {}: {}", self.username, e);
             let key = ErrorKey::new("CONFIG", format!("config_failed: {}", e));
-            error_tracker.record_error(key);
+            hd.error_tracker.record_error(key);
             return Err(e);
         }
         tracing::debug!("[PLAYER] Configuration phase complete");
@@ -128,7 +123,7 @@ impl PlayerData {
         if let Err(e) = JoinGameHandler::send_join_game(&mut self.socket, 1, &self.username).await {
             tracing::error!("[PLAYER] Failed to send join game packet to {}: {}", self.username, e);
             let key = ErrorKey::new("JOIN_GAME", "send_failed");
-            error_tracker.record_error(key);
+            hd.error_tracker.record_error(key);
             return Err(e);
         }
         tracing::debug!("[PLAYER] Join Game sent");
@@ -140,7 +135,7 @@ impl PlayerData {
         {
             tracing::error!("[PLAYER] Failed to send player info to {}: {}", self.username, e);
             let key = ErrorKey::new("PLAYER_INFO", "send_failed");
-            error_tracker.record_error(key);
+            hd.error_tracker.record_error(key);
             return Err(e);
         }
         tracing::debug!("[PLAYER] Player Info Add sent");
@@ -151,7 +146,7 @@ impl PlayerData {
         if let Err(e) = JoinGameHandler::send_spawn_position(&mut self.socket, spawn, 0.0).await {
             tracing::error!("[PLAYER] Failed to send spawn position: {}", e);
             let key = ErrorKey::new("SPAWN_POS", "send_failed");
-            error_tracker.record_error(key);
+            hd.error_tracker.record_error(key);
             return Err(e);
         }
         tracing::debug!("[PLAYER] Spawn Position sent");
@@ -168,7 +163,7 @@ impl PlayerData {
         {
             tracing::error!("[PLAYER] Failed to send player position sync: {}", e);
             let key = ErrorKey::new("POSITION_SYNC", "send_failed");
-            error_tracker.record_error(key);
+            hd.error_tracker.record_error(key);
             return Err(e);
         }
         tracing::debug!("[PLAYER] Player position sync sent");
@@ -182,14 +177,14 @@ impl PlayerData {
                 // self.x,
                 // self.y,
                 // self.z,
-                &_chunk_storage,
+                &hd.chunk_storage,
                 &mut self.loaded_chunks,
             )
             .await
             {
                 tracing::error!("[CHUNK] Failed to load initial chunks for {}: {}", self.username, e);
                 let key = ErrorKey::new("CHUNK", "load_failed");
-                error_tracker.record_error(key);
+                hd.error_tracker.record_error(key);
                 return Err(e);
             }
         }
@@ -222,13 +217,13 @@ impl PlayerData {
             }
 
             // Update loaded chunks based on player position
-            if self.check_chunk_changed(&_chunk_storage).await? {
+            if self.check_chunk_changed(&hd.chunk_storage).await? {
                 // Player moved to a different chunk - send new chunks
                 let socket = &mut self.socket;
                 if let Err(e) = Self::send_chunks_around_static(
                     socket,
                     &mut self.cooridinates,
-                    &_chunk_storage,
+                    &hd.chunk_storage,
                     &mut self.loaded_chunks,
                 )
                 .await

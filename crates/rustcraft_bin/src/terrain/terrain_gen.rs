@@ -144,8 +144,8 @@ pub struct BiomeMap {
     height: usize,
 }
 
-impl BiomeMap {
-    pub fn from_height_map(height_map: &HeightMap) -> Self {
+impl From<&HeightMap> for BiomeMap {
+    fn from(height_map: &HeightMap) -> Self {
         let width = 512; // Match height map size
         let height = 512;
         let mut data = vec![vec![Biome::Plains; width]; height];
@@ -161,6 +161,31 @@ impl BiomeMap {
 
         Self { data, width, height }
     }
+}
+
+impl From<&HeightMap> for Option<BiomeMap> {
+    fn from(height_map: &HeightMap) -> Self {
+        Some(BiomeMap::from(height_map))
+    }
+}
+
+impl BiomeMap {
+    // pub fn from_height_map(height_map: &HeightMap) -> Self {
+    //     let width = 512; // Match height map size
+    //     let height = 512;
+    //     let mut data = vec![vec![Biome::Plains; width]; height];
+    //     // PERF: @nested : Loop moved to thread engine
+    //     (0..height).for_each(|y| {
+    //         (0..width).for_each(|x| {
+    //             let elevation = height_map.get(x, y);
+    //             let slope = height_map.get_slope(x, y);
+    //
+    //             data[y][x] = Self::determine_biome(elevation, slope);
+    //         });
+    //     });
+    //
+    //     Self { data, width, height }
+    // }
 
     fn determine_biome(elevation: f64, slope: f64) -> Biome {
         // Snowline at elevation 0.7

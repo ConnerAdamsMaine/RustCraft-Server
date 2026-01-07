@@ -34,11 +34,14 @@ impl ChunkGenerator {
 
         // Lazy initialization of biome map
         {
+            // if let Some(ref mut bm) = self.biome_map.read().as_ref() {
+            // }
+
             let mut bm = self.biome_map.write();
-            if bm.is_none() {
+            if bm.as_ref().is_none() {
                 let hm_lock = self.height_map.read();
                 if let Some(hm) = hm_lock.as_ref() {
-                    *bm = Some(BiomeMap::from_height_map(hm));
+                    *bm = Some(BiomeMap::from(hm));
                 }
             }
         }
@@ -97,6 +100,7 @@ impl ChunkGenerator {
         }
     }
 
+    #[rustfmt::skip]
     fn get_block_for_biome(&self, y: usize, height: usize, biome: Biome, _elevation: f64) -> BlockType {
         if y >= height {
             return BlockType::Air;
@@ -104,64 +108,41 @@ impl ChunkGenerator {
 
         let depth = height - y;
 
+        // TODO: @from_into : This is a data transformation, plain and simple.
+        // We should be using From<Biome> for BlockType or similar.
         match biome {
             Biome::Ocean => BlockType::Stone,
-            Biome::Beach => {
-                if depth <= 2 {
-                    BlockType::Sand
-                } else {
-                    BlockType::Stone
-                }
+            Biome::Beach => match depth {
+                depth if depth <= 2 => BlockType::Sand,
+                _ => BlockType::Stone
             }
-            Biome::Plains => {
-                if depth == 0 {
-                    BlockType::Grass
-                } else if depth <= 3 {
-                    BlockType::Dirt
-                } else {
-                    BlockType::Stone
-                }
+            Biome::Plains => match depth {
+                0 => BlockType::Grass,
+                depth if depth <= 3 => BlockType::Dirt,
+                _ => BlockType::Stone,
             }
-            Biome::Forest => {
-                if depth == 0 {
-                    BlockType::Grass
-                } else if depth <= 4 {
-                    BlockType::Dirt
-                } else {
-                    BlockType::Stone
-                }
+            Biome::Forest => match depth {
+                0 => BlockType::Grass,
+                depth if depth <= 4 => BlockType::Dirt,
+                _ => BlockType::Stone,
             }
-            Biome::Mountain => {
-                if depth <= 2 {
-                    BlockType::Stone
-                } else if depth <= 6 {
-                    BlockType::Cobblestone
-                } else {
-                    BlockType::Stone
-                }
+            Biome::Mountain => match depth {
+                depth if depth <= 2 => BlockType::Stone,
+                depth if depth <= 6 => BlockType::Cobblestone,
+                _ => BlockType::Stone,
             }
-            Biome::Snow => {
-                if depth == 0 {
-                    BlockType::Grass // White snow-like top
-                } else if depth <= 2 {
-                    BlockType::Dirt
-                } else {
-                    BlockType::Stone
-                }
+            Biome::Snow => match depth {
+                0 => BlockType::Grass, // White snow-like top
+                depth if depth <= 2 => BlockType::Dirt,
+                _ => BlockType::Stone,
             }
-            Biome::SnowMountain => {
-                if depth <= 1 {
-                    BlockType::Stone
-                } else {
-                    BlockType::Cobblestone
-                }
+            Biome::SnowMountain => match depth {
+                depth if depth <= 1 => BlockType::Stone,
+                _ => BlockType::Stone,
             }
-            Biome::Desert => {
-                if depth <= 4 {
-                    BlockType::Sand
-                } else {
-                    BlockType::Stone
-                }
+            Biome::Desert => match depth {
+                depth if depth <= 4 => BlockType::Sand,
+                _ => BlockType::Stone,
             }
         }
     }

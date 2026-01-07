@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::ops::AddAssign;
 use std::path::PathBuf;
+use std::sync::atomic::AtomicUsize;
 use std::sync::{Arc, mpsc};
 
 use anyhow::Result;
@@ -20,6 +21,9 @@ use crate::consts::{
 use crate::core::ChunkGenThreadPool;
 use crate::terrain::{Chunk, ChunkGenerator, ChunkPos};
 use crate::world::{Region, RegionPos};
+
+const SLEEP_TIME_SECS: u64 = 300; // 5 minutes
+const SLEEP_TIME_DURATION: tokio::time::Duration = tokio::time::Duration::from_secs(SLEEP_TIME_SECS);
 
 // Memory budget constants
 // const CHUNK_SIZE_BYTES: usize = 232 * 1024; // ~232 KB per chunk
@@ -43,8 +47,7 @@ pub struct ChunkStorage {
     cache:           Arc<RwLock<LruCache<ChunkPos, Chunk>>>,
     world_dir:       PathBuf,
     chunk_generator: Arc<ChunkGenerator>,
-    // PERF: @atomics : Could we use an atomic counter here instead of RwLock?
-    evictions:       Arc<RwLock<usize>>,
+    evictions:       AtomicUsize,
     chunk_gen_pool:  Arc<ChunkGenThreadPool>,
 }
 
@@ -86,7 +89,7 @@ impl ChunkStorage {
             ))),
             world_dir,
             chunk_generator,
-            evictions: Arc::new(RwLock::new(0)),
+            evictions: AtomicUsize::new(0),
             chunk_gen_pool,
         };
 
@@ -94,17 +97,23 @@ impl ChunkStorage {
         debug!("[STARTUP] Starting pregeneration of spawn area...");
         storage.pregenerate_spawn_area()?;
 
+        storage.start_hit_reset_task();
+
+        storage.chunk_gen_pool.signal_init_complete();
+
         Ok(storage)
     }
 
+    /// Start hit count reset task (runs every 5 minutes)
     pub fn start_hit_reset_task(&self) {
         let cache = Arc::clone(&self.cache);
         tokio::spawn(async move {
             loop {
-                tokio::time::sleep(tokio::time::Duration::from_secs(300)).await; // 5 minutes
-                let mut cache_lock = cache.write();
-                cache_lock.reset_hit_counts();
-                drop(cache_lock);
+                tokio::time::sleep(SLEEP_TIME_DURATION).await;
+                cache.write().reset_hit_counts();
+                // let mut cache_lock = cache.write();
+                // cache_lock.reset_hit_counts();
+                // drop(cache_lock);
                 debug!("[CHUNK] Hit counts reset");
             }
         });
@@ -259,9 +268,14 @@ impl ChunkStorage {
         }
 
         if let Some(evicted_pos) = evicted_key {
-            let mut evictions = self.evictions.write();
-            *evictions += 1;
-            warn!("[CHUNK] Evicted low-hit chunk {} (total evictions: {})", evicted_pos, *evictions);
+            // let mut evictions = self.evictions.write();
+            // *evictions += 1;
+            self.evictions.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            warn!(
+                "[CHUNK] Evicted low-hit chunk {} (total evictions: {})",
+                evicted_pos,
+                self.evictions.load(std::sync::atomic::Ordering::SeqCst)
+            );
         }
 
         // If cache is getting full, flush to disk
@@ -439,7 +453,7 @@ impl Clone for ChunkStorage {
             cache:           self.cache.clone(),
             world_dir:       self.world_dir.clone(),
             chunk_generator: self.chunk_generator.clone(),
-            evictions:       self.evictions.clone(),
+            evictions:       AtomicUsize::from(self.evictions.load(std::sync::atomic::Ordering::SeqCst)),
             chunk_gen_pool:  self.chunk_gen_pool.clone(),
         }
     }

@@ -1,12 +1,13 @@
 #![allow(dead_code)]
 
 use std::marker::PhantomData;
+use std::sync::atomic::AtomicBool;
 use std::sync::mpsc::{Sender, channel};
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 
 use anyhow::Result;
-use tracing::info;
+use tracing::{debug, info};
 
 /// A generic thread pool that processes tasks of type T
 pub struct ThreadPool<T: Send + 'static> {
@@ -94,7 +95,8 @@ where
 pub struct ChunkGenThreadPool {
     pool:       Arc<ThreadPool<ChunkGenTask>>,
     // PERF: @atomic : Possible to do with an atomic bool instead of Mutex<bool>?
-    init_state: Arc<(Mutex<bool>, Condvar)>,
+    init_state: Arc<(AtomicBool, Condvar)>,
+    // Arc<(Mutex<bool>, Condvar)>,
 }
 
 pub struct ChunkGenTask;
@@ -111,7 +113,8 @@ impl ChunkGenThreadPool {
     pub fn new() -> Self {
         let pool = Arc::new(ThreadPool::new(4, "ChunkGen"));
         info!("[STARTUP] Chunk generation thread pool created with 4 workers");
-        let init_state = Arc::new((Mutex::new(false), Condvar::new()));
+        // let init_state = Arc::new((Mutex::new(false), Condvar::new()));
+        let init_state = Arc::new((AtomicBool::new(false), Condvar::new()));
         Self { pool, init_state }
     }
 
@@ -123,18 +126,30 @@ impl ChunkGenThreadPool {
     }
 
     pub fn signal_init_complete(&self) {
-        let (lock, condvar) = &*self.init_state;
-        let mut done = lock.lock().unwrap();
-        *done = true;
+        debug!("[CHUNK_GEN_POOL] Signaling initialization complete...");
+        let (atomic, condvar) = &*self.init_state;
+        // let mut done = lock.lock().unwrap();
+        // *done = true;
+        atomic.store(true, std::sync::atomic::Ordering::SeqCst);
+        debug!("[CHUNK_GEN_POOL] Initialization complete signaled. Notifying all waiting threads...");
         condvar.notify_all();
     }
 
     pub fn wait_for_init_complete(&self) {
-        let (lock, condvar) = &*self.init_state;
-        let mut done = lock.lock().unwrap();
-        while !*done {
-            done = condvar.wait(done).unwrap();
-        }
+        // original impl.
+        // let (lock, condvar) = &*self.init_state; //:  Arc<(Mutex<bool>, Condvar)>,
+        // let mut done = lock.lock().unwrap();
+        // while !*done {
+        //     done = condvar.wait(done).unwrap();
+        // }
+
+        // new impl.
+        let (atomic, condvar) = &*self.init_state; // : Arc<(AtomicBool, Condvar)>,
+        let dummy = Mutex::new(());
+
+        let _guard = condvar
+            .wait_while(dummy.lock().unwrap(), |_: &mut ()| !atomic.load(std::sync::atomic::Ordering::SeqCst))
+            .unwrap();
     }
 }
 
