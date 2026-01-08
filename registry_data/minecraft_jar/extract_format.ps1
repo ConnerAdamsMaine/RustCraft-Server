@@ -7,27 +7,31 @@ Uses Invoke-Expression to mimic the bash 'eval' behavior.
 #>
 
 param(
-    [string]$JAVA_FILE = $args[0],
     [string]$MINECRAFT_VERSION = "1.21.7",
-    [string]$JAVA_FILE_FALLBACK = "server_$MINECRAFT_VERSION.jar",
+    [string]$JAVA_FILE = "",
 
     # This points to 1.21.7 server jar (at time of creation, the $MINECRAFT_VERSION used)
-    [string]$SERVER_JAR_URL = "https://piston-data.mojang.com/v1/objects/05e4b48fbc01f0385adb74bcff9751d34552486c/server.jar";
+    [string]$SERVER_JAR_URL = "https://piston-data.mojang.com/v1/objects/05e4b48fbc01f0385adb74bcff9751d34552486c/server.jar"
 )
 
-[string]$MINECRAFT_VERSION = "1.21.7";
+[string]$script:MINECRAFT_VERSION = "1.21.7";
 [string]$script:JAVA_FILE_FALLBACK = "server_$script:MINECRAFT_VERSION.jar";
 
 [string]$script:SERVER_JAR_URL = "https://piston-data.mojang.com/v1/objects/05e4b48fbc01f0385adb74bcff9751d34552486c/server.jar";
 
-[string]$script:JAVA_FILE = $JAVA_FILE;
+# Use provided JAVA_FILE or default to fallback
+[string]$script:JAVA_FILE = if ($JAVA_FILE) { $JAVA_FILE } else { $script:JAVA_FILE_FALLBACK };
 
 function check_jar_exists {
     if (-not (Test-Path $script:JAVA_FILE)) {
         Write-Host "Downloading Minecraft server jar...";
 
-        $cmd = "Invoke-WebRequest -Uri '$script:SERVER_JAR_URL' -OutFile '$script:JAVA_FILE_FALLBACK'";
-        Invoke-Expression $cmd | Out-Null;
+        try {
+            Invoke-WebRequest -Uri $script:SERVER_JAR_URL -OutFile $script:JAVA_FILE_FALLBACK;
+        } catch {
+            Write-Host "Failed to download the Minecraft server jar.";
+            exit 1;
+        }
 
         if (-not (Test-Path $script:JAVA_FILE_FALLBACK)) {
             Write-Host "Failed to download the Minecraft server jar.";
@@ -61,13 +65,13 @@ function biome_fmt {
 }
 
 function cleanup {
-  $dirs=@{
+  $dirs=@(
     "generated",
     "libraries",
     "logs",
     "versions",
-    "$script:JAVA_FILE_FALLBACK",
-  };
+    "$script:JAVA_FILE_FALLBACK"
+  );
 
   foreach ($dir in $dirs) {
     if (Test-Path $dir) {
@@ -87,23 +91,22 @@ function Main {
       exit 0;
     };
 
-    $global:ExitCode = 0;
-
     check_jar_exists;
     if ($LASTEXITCODE -ne 0) { exit 1; }
 
     dep_check;
     if ($LASTEXITCODE -ne 0) { exit 1; }
 
-    extract_jar | Out-Null;
-    if ($LASTEXITCODE -ne 0) { $global:ExitCode = 1; }
+    extract_jar;
+    if ($LASTEXITCODE -ne 0) { 
+        Write-Host "An error occurred during extraction.";
+        exit 1;
+    }
 
-    biome_fmt | Out-Null;
-    if ($LASTEXITCODE -ne 0) { $global:ExitCode = 1; }
-
-    if ($global:ExitCode -ne 0) {
-        Write-Host "An error occurred during extraction or formatting."
-        exit 1
+    biome_fmt;
+    if ($LASTEXITCODE -ne 0) { 
+        Write-Host "An error occurred during formatting.";
+        exit 1;
     }
 
     return 0
