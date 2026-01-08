@@ -1,5 +1,4 @@
 target/
-world/
 *.log
-!src/world/
+
 .old*/
